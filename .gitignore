@@ -1,0 +1,6 @@
+**/__pycache__
+weights/
+.venv/
+.venv-dev/
+.env
+Notes.md

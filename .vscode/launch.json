@@ -1,0 +1,65 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Train Piece Classifier",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/chessvision/piece_classification/train_classifier.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--compute-embeddings",
+                "--description",
+                "",
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/training",
+            }
+        },
+        {
+            "name": "Train Segmentation Model",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/chessvision/board_extraction/train_unet.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "WANDB_API_KEY": "",
+            },
+            "args": [
+                "--epochs",
+                "20",
+                "--learning-rate",
+                "0.0000001",
+                "--classes",
+                "1",
+                "--scale",
+                "1",
+                "--batch-size",
+                "2",
+                "--amp"
+            ]
+        }
+        {
+            "name": "Run test suite",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/chessvision/test/test.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+
+        }
+    ]
+}
