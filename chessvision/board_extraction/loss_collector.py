@@ -1,15 +1,13 @@
-from __future__ import annotations
-
 from typing import Any
 
+import tlc
 import torch
 import torch.nn as nn
-from tlc.client.torch.metrics import MetricsCollector
-from tlc.core.schema import Schema
-from utils.dice_score import dice_loss
+
+from chessvision.pytorch_unet.utils.dice_score import dice_loss
 
 
-class LossCollector(MetricsCollector):
+class LossCollector(tlc.MetricsCollector):
     def __init__(self):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -35,5 +33,5 @@ class LossCollector(MetricsCollector):
         return metrics_batch
 
     @property
-    def column_schemas(self) -> dict[str, Schema]:
+    def column_schemas(self) -> dict[str, tlc.Schema]:
         return {}

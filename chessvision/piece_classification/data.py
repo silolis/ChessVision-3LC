@@ -1,3 +1,4 @@
+assert False, "This file is not meant to be executed."
 import tlc
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms

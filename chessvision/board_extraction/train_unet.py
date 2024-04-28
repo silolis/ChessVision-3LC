@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import logging
 from pathlib import Path
@@ -8,18 +6,16 @@ from typing import Any
 import tlc
 import torch
 import torch.nn as nn
-
-# import wandb
-from evaluate import evaluate
 from torch import optim
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import ToTensor
 from tqdm import tqdm
-from unet import UNet
-from utils.data_loading import BasicDataset
-from utils.dice_score import dice_loss
 
 from chessvision.board_extraction.loss_collector import LossCollector
+from chessvision.pytorch_unet.evaluate import evaluate
+from chessvision.pytorch_unet.unet import UNet
+from chessvision.pytorch_unet.utils.data_loading import BasicDataset
+from chessvision.pytorch_unet.utils.dice_score import dice_loss
 from chessvision.utils import best_extractor_weights, extractor_weights_dir
 
 # Ensure dataset has been downloaded and exists at DATASET_ROOT. See playground.ipynb for details.
@@ -39,7 +35,6 @@ assert dir_img.exists()
 assert dir_mask.exists()
 dir_checkpoint = extractor_weights_dir
 
-USE_WANDB = False
 
 def load_checkpoint(model: torch.nn.Module, checkpoint_path: str):
     state_dict = torch.load(checkpoint_path)
@@ -48,9 +43,11 @@ def load_checkpoint(model: torch.nn.Module, checkpoint_path: str):
     logging.info(f"Model loaded from {checkpoint_path}")
     return model
 
+
 def _save_checkpoint(model: torch.nn.Module, checkpoint_path: str):
     state_dict = model.state_dict()
     torch.save(state_dict, checkpoint_path)
+
 
 class TransformSampleToModel:
     """Convert a dict of PIL images to a dict of tensors of the right type."""
@@ -61,6 +58,7 @@ class TransformSampleToModel:
             "image": ToTensor()(image),
             "mask": ToTensor()(mask).long(),
         }
+
 
 class PrepareModelOutputsForLogging:
     def __init__(self, threshold: float = 0.5):
@@ -98,24 +96,32 @@ def train_model(
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
     # 2.1 Create 3LC datasets & training run
-    run = tlc.init("chessboard-segmentation")
+    run = tlc.init("chessvision-segmentation")
 
     sample_structure = {
         "image": tlc.PILImage("image"),
         "mask": tlc.SegmentationPILImage("mask", classes={0: "background", 255: "chessboard"}),
     }
 
-    tlc_val_dataset = tlc.Table.from_torch_dataset(
-        dataset=val_set,
-        dataset_name="chessboard-segmentation-val",
-        structure=sample_structure,
-    ).map(TransformSampleToModel()).latest()
+    tlc_val_dataset = (
+        tlc.Table.from_torch_dataset(
+            dataset=val_set,
+            dataset_name="chessboard-segmentation-val",
+            structure=sample_structure,
+        )
+        .map(TransformSampleToModel())
+        .latest()
+    )
 
-    tlc_train_dataset = tlc.Table.from_torch_dataset(
-        dataset=train_set,
-        dataset_name="chessboard-segmentation-train",
-        structure=sample_structure,
-    ).map(TransformSampleToModel()).latest()
+    tlc_train_dataset = (
+        tlc.Table.from_torch_dataset(
+            dataset=train_set,
+            dataset_name="chessboard-segmentation-train",
+            structure=sample_structure,
+        )
+        .map(TransformSampleToModel())
+        .latest()
+    )
 
     # 3. Create data loaders
     loader_args = {"batch_size": batch_size, "num_workers": 0, "pin_memory": True}
@@ -131,21 +137,6 @@ def train_model(
         drop_last=True,
         **loader_args,
     )
-
-    # (Initialize logging)
-    if USE_WANDB:
-        experiment = wandb.init(project="U-Net", resume="allow", anonymous="must")
-        experiment.config.update(
-            dict(
-                epochs=epochs,
-                batch_size=batch_size,
-                learning_rate=learning_rate,
-                val_percent=val_percent,
-                save_checkpoint=save_checkpoint,
-                img_scale=img_scale,
-                amp=amp,
-            )
-        )
 
     logging.info(
         f"""Starting training:
@@ -206,8 +197,6 @@ def train_model(
                 pbar.update(images.shape[0])
                 global_step += 1
                 epoch_loss += loss.item()
-                if USE_WANDB:
-                    experiment.log({"train loss": loss.item(), "step": global_step, "epoch": epoch})
 
                 pbar.set_postfix(**{"loss (batch)": loss.item()})
 
@@ -215,48 +204,11 @@ def train_model(
                 division_step = n_train // (5 * batch_size)
                 if division_step > 0:
                     if global_step % division_step == 0:
-                        if USE_WANDB:
-                            histograms = {}
-                            for tag, value in model.named_parameters():
-                                tag = tag.replace("/", ".")
-                                if not (torch.isinf(value) | torch.isnan(value)).any():
-                                    histograms["Weights/" + tag] = wandb.Histogram(value.data.cpu())
-                                if not (torch.isinf(value.grad) | torch.isnan(value.grad)).any():
-                                    histograms["Gradients/" + tag] = wandb.Histogram(value.grad.data.cpu())
-
                         val_score = evaluate(model, val_loader, device, amp)
                         scheduler.step(val_score)
 
                         tlc.log({"val_dice": val_score.item(), "step": global_step})
                         logging.info(f"Validation Dice score: {val_score}")
-
-                        if USE_WANDB:
-                            experiment.log(
-                                {
-                                    "learning rate": optimizer.param_groups[0]["lr"],
-                                    "validation Dice": val_score,
-                                    "images": wandb.Image(
-                                        images[0].cpu(),
-                                        masks={
-                                            "predicted": {
-                                                "mask_data": (torch.sigmoid(masks_pred[0]) > 0.5)
-                                                .float()
-                                                .cpu()
-                                                .numpy()
-                                                .squeeze(0),
-                                                "class_labels": {0: "background", 1: "chessboard"},
-                                            },
-                                            "true": {
-                                                "mask_data": true_masks[0].float().cpu().numpy(),
-                                                "class_labels": {0: "background", 1: "chessboard"},
-                                            },
-                                        },
-                                    ),
-                                    "step": global_step,
-                                    "epoch": epoch,
-                                    **histograms,
-                                }
-                            )
 
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
@@ -276,12 +228,9 @@ def train_model(
                 LossCollector(),
                 tlc.SegmentationMetricsCollector(
                     label_map={0: "background", 255: "chessboard"},
-                    preprocess_fn=PrepareModelOutputsForLogging(threshold=0.75)
+                    preprocess_fn=PrepareModelOutputsForLogging(threshold=0.75),
                 ),
-                tlc.EmbeddingsMetricsCollector(
-                    layers=[52],
-                    reshape_strategy={52: "mean"}
-                )
+                tlc.EmbeddingsMetricsCollector(layers=[52], reshape_strategy={52: "mean"}),
             ]
 
             tlc.collect_metrics(

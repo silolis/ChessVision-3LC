@@ -1,14 +1,13 @@
--e "../tlc-monorepo"
 --extra-index-url https://download.pytorch.org/whl/cu118
+-e "../tlc-monorepo[umap,pacmap]"
 torchvision
+timm
 matplotlib
 jupyter
 ipywidgets
-numpy
 Pillow
-tqdm
 mypy
 types-tqdm
-python-dotenv
 opencv-python
 python-chess
+tomli

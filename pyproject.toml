@@ -12,6 +12,3 @@ select = ["C", "E", "F", "W", "I", "YTT", "UP"]
 [tool.black]
 line-length = 120
 
-[tool.mypy]
-ignore_missing_imports = true
-ignore_missing_imports_per_module = true

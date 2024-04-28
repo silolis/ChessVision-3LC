@@ -2,11 +2,12 @@
     "jupyter.debugJustMyCode": false,
     "editor.formatOnSave": false,
     "[python]": {
-        "editor.formatOnSave": false,
+        "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
-            "source.organizeImports": "explicit"
+          "source.organizeImports.ruff": "explicit"
         },
-        "editor.defaultFormatter": "ms-python.black-formatter"
-    },
+        "editor.defaultFormatter": "charliermarsh.ruff",
+      },
+    "python.envFile": "${workspaceFolder}/.env",
     "mypy.runUsingActiveInterpreter": true,
 }

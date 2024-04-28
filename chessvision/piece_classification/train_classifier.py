@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 from typing import Any
@@ -172,22 +170,28 @@ MAX_EPOCHS = 10
 EARLY_STOPPING_PATIENCE = 4
 HIDDEN_LAYER_INDEX = 7
 
+
 def load_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer | None = None, filename="checkpoint.pth"):
     checkpoint = torch.load(filename)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint["model_state_dict"])
     if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epoch = checkpoint['epoch']
-    best_val_loss = checkpoint['best_val_loss']
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    epoch = checkpoint["epoch"]
+    best_val_loss = checkpoint["best_val_loss"]
     return model, optimizer, epoch, best_val_loss
 
+
 def save_checkpoint(model, optimizer, epoch, best_val_loss, filename="checkpoint.pth"):
-    torch.save({
-        'epoch': epoch,
-        'best_val_loss': best_val_loss,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-    }, filename)
+    torch.save(
+        {
+            "epoch": epoch,
+            "best_val_loss": best_val_loss,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        },
+        filename,
+    )
+
 
 def main(args):
     # Training variables
@@ -219,10 +223,9 @@ def main(args):
 
     run = tlc.init(
         project_name=args.project_name,
-        run_name="train-classifier-2",
         description=args.description,
         parameters=run_parameters,
-        if_exists="reuse",
+        # if_exists="reuse",
     )
     train_losses = []
     val_losses = []
@@ -231,7 +234,13 @@ def main(args):
 
     sampler = tlc_train_dataset.create_sampler()
     train_data_loader = DataLoader(
-        tlc_train_dataset, batch_size=32, shuffle=False, sampler=sampler, num_workers=4, pin_memory=True, persistent_workers=True
+        tlc_train_dataset,
+        batch_size=32,
+        shuffle=False,
+        sampler=sampler,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
     )
     val_data_loader = DataLoader(tlc_val_dataset, batch_size=32, shuffle=False, num_workers=0, pin_memory=True)
     metrics_collection_dataloader_args = {
@@ -273,7 +282,16 @@ def main(args):
             dataloader_args=metrics_collection_dataloader_args,
         )
 
-        tlc.log({"train_loss": train_loss, "val_loss": val_loss, "train_acc": train_acc, "val_acc": val_acc, "epoch": epoch, "learning_rate": optimizer.param_groups[0]["lr"]})  # noqa: E501
+        tlc.log(
+            {
+                "train_loss": train_loss,
+                "val_loss": val_loss,
+                "train_acc": train_acc,
+                "val_acc": val_acc,
+                "epoch": epoch,
+                "learning_rate": optimizer.param_groups[0]["lr"],
+            }
+        )
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -326,3 +344,4 @@ if __name__ == "__main__":
     argparser.add_argument("--compute-embeddings", action="store_true")
     args = argparser.parse_args()
     main(args)
+x
