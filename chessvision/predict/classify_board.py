@@ -1,34 +1,37 @@
 """
 Classify a 512x512 image of a chessboard.
 """
+
 import chess
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from .extract_squares import extract_squares
 
-label_names  = ['B', 'K', 'N', 'P', 'Q', 'R', 'b', 'k', 'n', 'p', 'q', 'r', 'f']
+label_names = ["B", "K", "N", "P", "Q", "R", "b", "k", "n", "p", "q", "r", "f"]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def classify_board(board_img, model, flip=False):
-    #print("Classifying board..")
 
+def classify_board(board_img, model, flip=False):
     squares, names = extract_squares(board_img, flip=flip)
     # squares is (batch, 64, 64, 1)
     batch = torch.Tensor(squares).permute(0, 3, 1, 2).to(device)
+    batch /= 255.0
     with torch.no_grad():
         predictions = model(batch)
 
+    predictions = F.softmax(predictions, dim=1)
     predictions = predictions.detach().cpu().numpy()
     chessboard = classification_logic(predictions, names)
 
     FEN = chessboard.board_fen(promoted=False)
-    #print("\rClassifying board.. DONE")
+    # print("\rClassifying board.. DONE")
 
     return FEN, predictions, chessboard, squares, names
 
-def classification_logic(probs, names):
 
+def classification_logic(probs, names):
     initial_predictions = np.argmax(probs, axis=1)
 
     pred_labels = [label_names[p] for p in initial_predictions]
@@ -42,6 +45,7 @@ def classification_logic(probs, names):
 
     return board
 
+
 def check_multiple_kings(pred_labels, probs, names):
     argsorted_probs = np.argsort(probs)
     sorted_probs = np.take_along_axis(probs, argsorted_probs, axis=-1)
@@ -50,7 +54,9 @@ def check_multiple_kings(pred_labels, probs, names):
         if pred_labels.count(piece_descriptor) > 1:
             print(f"Predicted more than one occurence of '{piece_descriptor}'")
 
-            king_indices_and_probs = [(i, sorted_probs[i][-1]) for i, v in enumerate(pred_labels) if v == piece_descriptor]
+            king_indices_and_probs = [
+                (i, sorted_probs[i][-1]) for i, v in enumerate(pred_labels) if v == piece_descriptor
+            ]
             most_likely_king_index = max(king_indices_and_probs, key=lambda x: x[1])[0]
             for king_index, _ in king_indices_and_probs:
                 if king_index == most_likely_king_index:
@@ -62,6 +68,7 @@ def check_multiple_kings(pred_labels, probs, names):
 
     return pred_labels
 
+
 def check_bishops(pred_labels, probs, names):
     # check if more than two dark/light bishops
     # check if dark bishop on light square and vice versa
@@ -69,12 +76,45 @@ def check_bishops(pred_labels, probs, names):
     argsorted_probs = np.argsort(probs)
     sorted_probs = np.take_along_axis(probs, argsorted_probs, axis=-1)
 
-    dark_squares  = ["a1", "c1", "e1", "g1", "b2", "d2", "f2", "h2", "a3", "c3", "e3", "g3", "b4", "d4", "f4", "h4", "a5", "c5", "e5", "g5", "b6", "d6", "f6", "h6", "a7", "c7", "e7", "g7", "b8", "d8", "f8", "h8"]
-    #light_squares = ["b1", "d1", "f1", "h1", "a2", "c2", "e2", "g2", "b3", "d3", "f3", "h3", "a4", "c4", "e4", "g4", "b5", "d5", "f5", "h5", "a6", "c6", "e6", "g6", "b7", "d7", "f7", "h7", "a8", "c8", "e8", "g8"]
+    dark_squares = [
+        "a1",
+        "c1",
+        "e1",
+        "g1",
+        "b2",
+        "d2",
+        "f2",
+        "h2",
+        "a3",
+        "c3",
+        "e3",
+        "g3",
+        "b4",
+        "d4",
+        "f4",
+        "h4",
+        "a5",
+        "c5",
+        "e5",
+        "g5",
+        "b6",
+        "d6",
+        "f6",
+        "h6",
+        "a7",
+        "c7",
+        "e7",
+        "g7",
+        "b8",
+        "d8",
+        "f8",
+        "h8",
+    ]
+    # light_squares = ["b1", "d1", "f1", "h1", "a2", "c2", "e2", "g2", "b3", "d3", "f3", "h3", "a4", "c4", "e4", "g4", "b5", "d5", "f5", "h5", "a6", "c6", "e6", "g6", "b7", "d7", "f7", "h7", "a8", "c8", "e8", "g8"]
 
-    white_bishops_dark_squares  = []
+    white_bishops_dark_squares = []
     white_bishops_light_squares = []
-    black_bishops_dark_squares  = []
+    black_bishops_dark_squares = []
     black_bishops_light_squares = []
 
     for label, name in zip(pred_labels, names):
@@ -112,13 +152,13 @@ def check_bishops(pred_labels, probs, names):
 def check_knights(pred_labels, probs, names):
     # check if more than two white/black knights
 
-    sorted_probs    = np.sort(probs)
+    sorted_probs = np.sort(probs)
 
-    num_white_knights  = 0
-    num_black_knights  = 0
+    num_white_knights = 0
+    num_black_knights = 0
 
-    white_knights  = []
-    black_knights  = []
+    white_knights = []
+    black_knights = []
 
     for label, name in zip(pred_labels, names):
         if label == "N":
@@ -144,6 +184,7 @@ def check_knights(pred_labels, probs, names):
 
     return pred_labels
 
+
 def check_pawns_not_on_first_rank(pred_labels, probs, names):
     """
     probs is (64, 13)
@@ -166,6 +207,7 @@ def check_pawns_not_on_first_rank(pred_labels, probs, names):
                 pred_labels[i] = new_label
 
     return pred_labels
+
 
 def build_board_from_labels(labels, names):
     board = chess.BaseBoard(board_fen=None)

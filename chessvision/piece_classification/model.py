@@ -58,9 +58,10 @@ class ChessVisionModel(nn.Module):
 
 if __name__ == "__main__":
     # List all the layers of the model
+    import timm
 
-    model = ChessVisionModel(1024, 64, 13)
-
+    model = timm.create_model("resnet18", pretrained=False, num_classes=13, in_chans=1)
+    model.eval()
     for i, (name, param) in enumerate(model.named_modules()):
         print(f"Layer {i}: {name}")
 

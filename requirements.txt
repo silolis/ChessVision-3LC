@@ -10,3 +10,5 @@ types-tqdm
 opencv-python
 python-chess
 timm
+torchinfo
+cairosvg

@@ -1,11 +1,11 @@
 import logging
 
 import cv2
+import timm
 import torch
 
 from chessvision.board_extraction.train_unet import load_checkpoint as load_extractor_checkpoint
-from chessvision.piece_classification.model import ChessVisionModel
-from chessvision.piece_classification.train_classifier import DENSE_1_SIZE, DENSE_2_SIZE, NUM_CLASSES
+from chessvision.piece_classification.train_classifier import NUM_CLASSES
 from chessvision.piece_classification.train_classifier import load_checkpoint as load_classifier_checkpoint
 from chessvision.predict.classify_board import classify_board
 from chessvision.predict.extract_board import extract_board
@@ -25,6 +25,9 @@ sq_model: torch.nn.Module | None = None
 def load_models():
     global board_model, sq_model
 
+    if board_model is not None and sq_model is not None:
+        return board_model, sq_model
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     ###### Load extractor model ######
@@ -36,7 +39,12 @@ def load_models():
 
     ###### Load classifier model ######
     # classifier = get_classifier_model("resnet18")
-    classifier = ChessVisionModel(DENSE_1_SIZE, DENSE_2_SIZE, NUM_CLASSES)
+    classifier = timm.create_model(
+        "resnet18",
+        num_classes=NUM_CLASSES,
+        in_chans=1,
+        # checkpoint_path=best_classifier_weights,
+    )
     classifier, _, _, _ = load_classifier_checkpoint(classifier, None, best_classifier_weights)
     classifier.eval()
     classifier.to(device)

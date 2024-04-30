@@ -13,7 +13,6 @@ import torchvision.transforms as transforms
 import tqdm
 from torch.utils.data import DataLoader
 
-from chessvision.piece_classification.model import ChessVisionModel
 from chessvision.piece_classification.training_utils import EarlyStopping
 from chessvision.utils import classifier_weights_dir
 
@@ -64,7 +63,6 @@ label_names = [
     "Black Queen",
     "Black Rook",
     "Empty Square",
-    "Unknown",
 ]
 
 
@@ -80,33 +78,6 @@ def train_trans(sample):
 
 def val_trans(sample):
     return val_transforms(sample[0]), sample[1]
-
-
-tlc_train_dataset = (
-    tlc.Table.from_torch_dataset(
-        dataset=train_dataset,
-        dataset_name=TRAIN_DATASET_NAME,
-        table_name="train",
-        structure=sample_structure,
-    )
-    .map(train_trans)
-    .map_collect_metrics(val_trans)
-    .latest()
-)
-
-tlc_val_dataset = (
-    tlc.Table.from_torch_dataset(
-        dataset=val_dataset,
-        dataset_name=VAL_DATASET_NAME,
-        table_name="val",
-        structure=sample_structure,
-    )
-    .map(val_trans)
-    .latest()
-)
-
-print(f"Using training dataset: {tlc_train_dataset.url}")
-print(f"Using validation dataset: {tlc_val_dataset.url}")
 
 
 # Training step
@@ -168,7 +139,7 @@ LR_SCHEDULER_STEP_SIZE = 4
 LR_SCHEDULER_GAMMA = 0.1
 MAX_EPOCHS = 10
 EARLY_STOPPING_PATIENCE = 4
-HIDDEN_LAYER_INDEX = 7
+HIDDEN_LAYER_INDEX = 90
 
 
 def load_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer | None = None, filename="checkpoint.pth"):
@@ -182,6 +153,7 @@ def load_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer | N
 
 
 def save_checkpoint(model, optimizer, epoch, best_val_loss, filename="checkpoint.pth"):
+    filename = filename[:-4] + f"_{epoch}.pth" if epoch > 0 else filename
     torch.save(
         {
             "epoch": epoch,
@@ -210,15 +182,12 @@ def main(args):
 
     # Create datasets
     run_parameters = {
-        "DENSE_1_SIZE": DENSE_1_SIZE,
-        "DENSE_2_SIZE": DENSE_2_SIZE,
         "NUM_CLASSES": NUM_CLASSES,
         "INITIAL_LR": INITIAL_LR,
         "LR_SCHEDULER_STEP_SIZE": LR_SCHEDULER_STEP_SIZE,
         "LR_SCHEDULER_GAMMA": LR_SCHEDULER_GAMMA,
         "MAX_EPOCHS": MAX_EPOCHS,
         "EARLY_STOPPING_PATIENCE": EARLY_STOPPING_PATIENCE,
-        "HIDDEN_LAYER_INDEX": HIDDEN_LAYER_INDEX,
     }
 
     run = tlc.init(
@@ -232,6 +201,33 @@ def main(args):
     train_accuracies = []
     val_accuracies = []
 
+    tlc_train_dataset = (
+        tlc.Table.from_torch_dataset(
+            dataset=train_dataset,
+            dataset_name=TRAIN_DATASET_NAME,
+            table_name="train",
+            structure=sample_structure,
+            project_name=args.project_name,
+        )
+        .map(train_trans)
+        .map_collect_metrics(val_trans)
+        .latest()
+    )
+
+    tlc_val_dataset = (
+        tlc.Table.from_torch_dataset(
+            dataset=val_dataset,
+            dataset_name=VAL_DATASET_NAME,
+            table_name="val",
+            structure=sample_structure,
+            project_name=args.project_name,
+        )
+        .map(val_trans)
+        .latest()
+    )
+
+    print(f"Using training dataset: {tlc_train_dataset.url}")
+    print(f"Using validation dataset: {tlc_val_dataset.url}")
     sampler = tlc_train_dataset.create_sampler()
     train_data_loader = DataLoader(
         tlc_train_dataset,
@@ -325,9 +321,7 @@ def main(args):
 
 
 def get_model(model_id: str) -> nn.Module:
-    if model_id == "chessvision-cnn":
-        model = ChessVisionModel(DENSE_1_SIZE, DENSE_2_SIZE, NUM_CLASSES)
-    elif model_id == "resnet18":
+    if model_id == "resnet18":
         model = timm.create_model("resnet18", pretrained=False, num_classes=NUM_CLASSES, in_chans=1)
     elif model_id == "efficientnet":
         model = timm.create_model("efficientnet_b0", pretrained=False, num_classes=NUM_CLASSES, in_chans=1)
@@ -344,4 +338,3 @@ if __name__ == "__main__":
     argparser.add_argument("--compute-embeddings", action="store_true")
     args = argparser.parse_args()
     main(args)
-x
