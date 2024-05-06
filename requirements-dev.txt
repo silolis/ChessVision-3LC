@@ -13,3 +13,5 @@ python-chess
 tomli
 torchinfo
 cairosvg
+cleanvision[all]
+cleanlab[all]
