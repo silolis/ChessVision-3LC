@@ -22,44 +22,57 @@ board_model: torch.nn.Module | None = None
 sq_model: torch.nn.Module | None = None
 
 
-def load_models():
-    global board_model, sq_model
+def load_classifier(checkpoint_path: str = best_classifier_weights):
+    global sq_model
 
-    if board_model is not None and sq_model is not None:
-        return board_model, sq_model
+    if sq_model is not None:
+        return sq_model
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    ###### Load extractor model ######
-    extractor = UNet(n_channels=3, n_classes=1)
-    extractor = extractor.to(memory_format=torch.channels_last)
-    extractor = load_extractor_checkpoint(extractor, best_extractor_weights)
-    extractor.eval()
-    extractor.to(device)
-
-    ###### Load classifier model ######
-    # classifier = get_classifier_model("resnet18")
     classifier = timm.create_model(
         "resnet18",
         num_classes=NUM_CLASSES,
         in_chans=1,
-        # checkpoint_path=best_classifier_weights,
     )
-    classifier, _, _, _ = load_classifier_checkpoint(classifier, None, best_classifier_weights)
+    classifier, _, _, _ = load_classifier_checkpoint(classifier, None, checkpoint_path)
     classifier.eval()
     classifier.to(device)
 
+    return classifier
+
+
+def load_board_extractor(checkpoint_path: str = best_extractor_weights):
+    global board_model
+
+    if board_model is not None:
+        return board_model
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    extractor = UNet(n_channels=3, n_classes=1)
+    extractor = extractor.to(memory_format=torch.channels_last)
+    extractor = load_extractor_checkpoint(extractor, checkpoint_path)
+    extractor.eval()
+    extractor.to(device)
     board_model = extractor
-    sq_model = classifier
 
-    return extractor, classifier
+    return extractor
 
 
-def classify_raw(img, filename="", board_model=None, sq_model=None, flip=False, threshold=80):
+def classify_raw(
+    img,
+    filename="",
+    board_model=None,
+    sq_model=None,
+    flip=False,
+    threshold=80,
+):
     logger.debug(f"Processing image {filename}")
 
-    if not board_model or not sq_model:
-        board_model, sq_model = load_models()
+    if not board_model:
+        board_model = load_board_extractor()
+    if not sq_model:
+        sq_model = load_classifier()
 
     ###############################   STEP 1    #########################################
 

@@ -11,17 +11,17 @@ import torch
 from PIL import Image
 
 from chessvision.predict.classify_raw import classify_raw
-from chessvision.utils import data_root, listdir_nohidden, test_labels
+from chessvision.utils import DATA_ROOT, INPUT_SIZE, PIECE_SIZE, listdir_nohidden
 
-TEST_DATA_DIR = Path(data_root) / "test"
-# LABEL_NAMES = ["B", "K", "N", "P", "Q", "R", "b", "k", "n", "p", "q", "r", "f"]
-LABEL_NAMES = ["f", "P", "p", "R", "r", "N", "n", "B", "b", "Q", "q", "K", "k"]
+TEST_DATA_DIR = Path(DATA_ROOT) / "test"
+
 PROJECT_NAME = "chessvision-testing"
-BLACK_BOARD = Image.fromarray(np.zeros((256, 256)).astype(np.uint8))
-BLACK_CROP = Image.fromarray(np.zeros((64, 64)).astype(np.uint8))
+LABEL_NAMES = ["f", "P", "p", "R", "r", "N", "n", "B", "b", "Q", "q", "K", "k"]
+BLACK_BOARD = Image.fromarray(np.zeros(INPUT_SIZE).astype(np.uint8))
+BLACK_CROP = Image.fromarray(np.zeros(PIECE_SIZE).astype(np.uint8))
 
 
-def sim(a, b):
+def accuracy(a, b):
     return sum([aa == bb for aa, bb in zip(a, b)]) / len(a)
 
 
@@ -98,8 +98,8 @@ def run_tests(
     metrics_writer = tlc.MetricsTableWriter(
         run.url,
         column_schemas={
-            "true_labels": tlc.CategoricalLabel("true_labels", test_labels),
-            "predicted_labels": tlc.CategoricalLabel("predicted_labels", test_labels),
+            "true_labels": tlc.CategoricalLabel("true_labels", LABEL_NAMES),
+            "predicted_labels": tlc.CategoricalLabel("predicted_labels", LABEL_NAMES),
             "raw_imgs": tlc.PILImage("raw_imgs"),
             "rendered_board": tlc.Schema(value=tlc.ImageUrlStringValue("rendered_board")),
         },
@@ -152,15 +152,15 @@ def run_tests(
 
             predicted_labels = vectorize_chessboard(chessboard)
 
-            this_board_acc = sim(predicted_labels, true_labels)
+            this_board_acc = accuracy(predicted_labels, true_labels)
             test_accuracy += this_board_acc
 
-            labels_int = [test_labels.index(label) for label in true_labels]
+            labels_int = [LABEL_NAMES.index(label) for label in true_labels]
             for i in range(8):
                 labels_int[i * 8 : (i + 1) * 8] = list(reversed(labels_int[i * 8 : (i + 1) * 8]))
             labels_int = list(reversed(labels_int))
 
-            predicted_labels_int = [test_labels.index(label) for label in predicted_labels]
+            predicted_labels_int = [LABEL_NAMES.index(label) for label in predicted_labels]
             predicted_labels_int = list(reversed(predicted_labels_int))
 
             for i in range(8):
@@ -210,6 +210,6 @@ if __name__ == "__main__":
     run = run_tests()
     stop = time.time()
     print(f"Tests completed in {stop-start:.1f}s")
-    print("Test accuracy: {}".format(run.constants["parameters"]["top_1_accuracy"]))
-    print("Top-2 accuracy: {}".format(run.constants["parameters"]["top_2_accuracy"]))
-    print("Top-3 accuracy: {}".format(run.constants["parameters"]["top_3_accuracy"]))
+    print("Test accuracy: {}".format(run.constants["parameters"]["constants"]["top_1_accuracy"]))
+    print("Top-2 accuracy: {}".format(run.constants["parameters"]["constants"]["top_2_accuracy"]))
+    print("Top-3 accuracy: {}".format(run.constants["parameters"]["constants"]["top_3_accuracy"]))

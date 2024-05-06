@@ -261,6 +261,7 @@ def train_model(
         method="pacmap",
         n_components=2,
     )
+    return run
 
 
 def get_args():
@@ -283,6 +284,7 @@ def get_args():
     parser.add_argument("--amp", action="store_true", default=False, help="Use mixed precision")
     parser.add_argument("--bilinear", action="store_true", default=False, help="Use bilinear upsampling")
     parser.add_argument("--classes", "-c", type=int, default=2, help="Number of classes")
+    parser.add_argument("--run-tests", action="store_true", help="Run the test suite after training")
 
     return parser.parse_args()
 
@@ -311,32 +313,18 @@ if __name__ == "__main__":
         load_checkpoint(model, best_extractor_weights)
 
     model.to(device=device)
-    try:
-        train_model(
-            model=model,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.lr,
-            device=device,
-            img_scale=args.scale,
-            val_percent=args.val / 100,
-            amp=args.amp,
-        )
-    except torch.cuda.OutOfMemoryError:
-        logging.error(
-            "Detected OutOfMemoryError! "
-            "Enabling checkpointing to reduce memory usage, but this slows down training. "
-            "Consider enabling AMP (--amp) for fast and memory efficient training"
-        )
-        torch.cuda.empty_cache()
-        model.use_checkpointing()
-        train_model(
-            model=model,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.lr,
-            device=device,
-            img_scale=args.scale,
-            val_percent=args.val / 100,
-            amp=args.amp,
-        )
+
+    run = train_model(
+        model=model,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.lr,
+        device=device,
+        img_scale=args.scale,
+        val_percent=args.val / 100,
+        amp=args.amp,
+    )
+    if args.run_tests:
+        from chessvision.test import run_tests
+
+        run_tests(run=run, extractor=model)

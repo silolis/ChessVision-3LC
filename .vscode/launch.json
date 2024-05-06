@@ -6,7 +6,7 @@
     "configurations": [
         {
             "name": "Python: Current File",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
@@ -14,15 +14,15 @@
         },
         {
             "name": "Train Piece Classifier",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/chessvision/piece_classification/train_classifier.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
                 "--compute-embeddings",
-                "--description",
-                "",
+                "--description", "Weight incorrect, loss > 0.1, confidence > 0.5 to 3",
+                "--run-tests",
             ],
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/training",
@@ -30,14 +30,11 @@
         },
         {
             "name": "Train Segmentation Model",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/chessvision/board_extraction/train_unet.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "env": {
-                "WANDB_API_KEY": "",
-            },
             "args": [
                 "--epochs",
                 "20",
@@ -49,12 +46,13 @@
                 "1",
                 "--batch-size",
                 "2",
-                "--amp"
+                "--amp",
+                "--run-tests"
             ]
-        }
+        },
         {
             "name": "Run test suite",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/chessvision/test/test.py",
             "console": "integratedTerminal",
