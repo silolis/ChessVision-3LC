@@ -310,6 +310,11 @@ def main(args):
         from chessvision.test import run_tests
 
         print("Running tests...")
+        del model
+        model = timm.create_model("resnet18", num_classes=NUM_CLASSES, in_chans=1)
+        model, _, _, _ = load_checkpoint(model, None, last_checkpoint)
+        model.eval()
+        model.to(device)
         run_tests(run=run, classifier=model)
 
     print("Training completed")

@@ -21,7 +21,7 @@
             "justMyCode": false,
             "args": [
                 "--compute-embeddings",
-                "--description", "Weight incorrect, loss > 0.1, confidence > 0.5 to 3",
+                "--description", "",
                 "--run-tests",
             ],
             "env": {
