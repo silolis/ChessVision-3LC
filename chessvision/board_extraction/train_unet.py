@@ -6,9 +6,10 @@ from typing import Any
 import tlc
 import torch
 import torch.nn as nn
+import torchvision.transforms.functional as F
 from torch import optim
 from torch.utils.data import DataLoader, random_split
-from torchvision.transforms import ToTensor
+from torchvision import transforms as T
 from tqdm import tqdm
 
 from chessvision.board_extraction.loss_collector import LossCollector
@@ -53,11 +54,36 @@ class TransformSampleToModel:
     """Convert a dict of PIL images to a dict of tensors of the right type."""
 
     def __call__(self, sample: dict[str, Any]) -> dict[str, torch.Tensor]:
-        image, mask = sample["image"], sample["mask"]
         return {
-            "image": ToTensor()(image),
-            "mask": ToTensor()(mask).long(),
+            "image": T.ToTensor()(sample["image"]),
+            "mask": T.ToTensor()(sample["mask"]).long(),
         }
+
+
+class AugmentImages:
+    """Apply random augmentations to the images and masks."""
+
+    def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
+        image, mask = sample["image"], sample["mask"]
+
+        # Random horizontal flip
+        if torch.rand(1) > 0.5:
+            image = F.hflip(image)
+            mask = F.hflip(mask)
+
+        # Random rotation
+        if torch.rand(1) > 0.5:
+            angle = torch.randint(-15, 15, (1,)).item()
+            image = F.rotate(image, angle)
+            mask = F.rotate(mask, angle)
+
+        if torch.rand(1) > 0.5:
+            image = T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)(image)
+
+        if torch.rand(1) > 0.5:
+            image = T.GaussianBlur(3)(image)
+
+        return TransformSampleToModel()({"image": image, "mask": mask})
 
 
 class PrepareModelOutputsForLogging:
@@ -74,8 +100,8 @@ class PrepareModelOutputsForLogging:
 
 
 def train_model(
-    model,
-    device,
+    model: torch.nn.Module,
+    device: torch.device,
     epochs: int = 5,
     batch_size: int = 1,
     learning_rate: float = 1e-5,
@@ -96,7 +122,7 @@ def train_model(
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
     # 2.1 Create 3LC datasets & training run
-    run = tlc.init("chessvision-segmentation")
+    run = tlc.init("chessvision-segmentation", "base-run")
 
     sample_structure = {
         "image": tlc.PILImage("image"),
@@ -122,6 +148,10 @@ def train_model(
         .map(TransformSampleToModel())
         .latest()
     )
+    # .map(AugmentImages())
+
+    print(f"Using training table {tlc_train_dataset.url}")
+    print(f"Using validation table {tlc_val_dataset.url}")
 
     # 3. Create data loaders
     loader_args = {"batch_size": batch_size, "num_workers": 0, "pin_memory": True}
@@ -160,10 +190,11 @@ def train_model(
         momentum=momentum,
         foreach=True,
     )
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "max", patience=5)  # goal: maximize Dice score
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "max", patience=3)  # goal: maximize Dice score
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
     criterion = nn.BCEWithLogitsLoss()
     global_step = 0
+    best_val_score = 0.0
 
     # 5. Begin training
     for epoch in range(1, epochs + 1):
@@ -205,24 +236,31 @@ def train_model(
                 pbar.set_postfix(**{"loss (batch)": loss.item()})
 
                 # Evaluation round
-                division_step = n_train // (5 * batch_size)
+                division_step = n_train // (2 * batch_size)
                 if division_step > 0:
                     if global_step % division_step == 0:
                         val_score = evaluate(model, val_loader, device, amp)
                         scheduler.step(val_score)
 
-                        tlc.log({"val_dice": val_score.item(), "step": global_step})
+                        tlc.log(
+                            {
+                                "val_dice": val_score.item(),
+                                "step": global_step,
+                                "lr": optimizer.param_groups[0]["lr"],
+                            }
+                        )
                         logging.info(f"Validation Dice score: {val_score}")
 
-        if save_checkpoint:
+        if save_checkpoint and val_score > best_val_score:
+            best_val_score = val_score
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             _save_checkpoint(model, str(Path(dir_checkpoint) / f"checkpoint_epoch{epoch}.pth"))
-            logging.info(f"Checkpoint {epoch} saved!")
+            logging.info(f"Checkpoint {epoch} saved! (Dice score: {best_val_score})")
 
         tlc.log({"train_loss": epoch_loss / n_train, "epoch": epoch})
 
         # Collect per-sample metrics using tlc every 5 epochs
-        if epoch in [1, 5, 10, 15, 20]:
+        if epoch in [15]:
             predictor = tlc.Predictor(
                 model=model,
                 layers=[52],
@@ -254,7 +292,7 @@ def train_model(
                 dataloader_args={"batch_size": 4},
             )
 
-    print("Training completed. Reducing embeddings to 3 dimensions using pacmap...")
+    print("Training completed. Reducing embeddings to 2 dimensions using pacmap...")
     run.reduce_embeddings_by_foreign_table_url(
         tlc_train_dataset.url,
         delete_source_tables=True,

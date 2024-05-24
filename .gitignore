@@ -4,3 +4,4 @@ weights/
 .venv-dev/
 .env
 Notes.md
+output/

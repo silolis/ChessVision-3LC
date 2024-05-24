@@ -1,4 +1,5 @@
 import argparse
+import time
 from pathlib import Path
 from typing import Any
 
@@ -149,6 +150,7 @@ def save_checkpoint(model, optimizer, epoch, best_val_loss, filename="checkpoint
 
 def main(args):
     # Training variables
+    start = time.time()
     early_stopping = EarlyStopping(patience=EARLY_STOPPING_PATIENCE, verbose=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = timm.create_model("resnet18", num_classes=NUM_CLASSES, in_chans=1)
@@ -252,26 +254,6 @@ def main(args):
         val_loss, val_acc = validate(model, val_data_loader, criterion, device)
         scheduler.step()
 
-        tlc.collect_metrics(
-            tlc_val_dataset,
-            metrics_collectors=metrics_collectors,
-            predictor=predictor,
-            split="val",
-            constants={"epoch": epoch},
-            dataloader_args=metrics_collection_dataloader_args,
-            exclude_zero_weights=True,
-        )
-
-        tlc.collect_metrics(
-            tlc_train_dataset,
-            metrics_collectors=metrics_collectors,
-            predictor=predictor,
-            split="train",
-            constants={"epoch": epoch},
-            dataloader_args=metrics_collection_dataloader_args,
-            exclude_zero_weights=True,
-        )
-
         tlc.log(
             {
                 "train_loss": train_loss,
@@ -302,9 +284,36 @@ def main(args):
             print("Early stopping")
             break
 
+    tlc.collect_metrics(
+        tlc_val_dataset,
+        metrics_collectors=metrics_collectors,
+        predictor=predictor,
+        split="val",
+        constants={"epoch": epoch},
+        dataloader_args=metrics_collection_dataloader_args,
+        exclude_zero_weights=True,
+        collect_aggregates=False,
+    )
+
+    tlc.collect_metrics(
+        tlc_train_dataset,
+        metrics_collectors=metrics_collectors,
+        predictor=predictor,
+        split="train",
+        constants={"epoch": epoch},
+        dataloader_args=metrics_collection_dataloader_args,
+        exclude_zero_weights=True,
+        collect_aggregates=False,
+    )
+
+    duration = time.time() - start
+    minutes = int(duration // 60)
+    seconds = int(duration % 60)
+    print(f"Training completed in {minutes} minutes and {seconds} seconds.")
+
     if args.compute_embeddings:
         print("Reducing embeddings...")
-        run.reduce_embeddings_per_dataset(n_components=2, method="pacmap")
+        run.reduce_embeddings_per_dataset(n_components=2, method="pacmap", delete_source_tables=True)
 
     if args.run_tests:
         from chessvision.test import run_tests
@@ -316,8 +325,6 @@ def main(args):
         model.eval()
         model.to(device)
         run_tests(run=run, classifier=model)
-
-    print("Training completed")
 
 
 if __name__ == "__main__":

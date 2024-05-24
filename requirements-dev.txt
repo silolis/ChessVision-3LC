@@ -15,3 +15,4 @@ torchinfo
 cairosvg
 cleanvision[all]
 cleanlab[all]
+nomic
