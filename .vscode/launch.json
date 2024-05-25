@@ -57,8 +57,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/chessvision/test/test.py",
             "console": "integratedTerminal",
-            "justMyCode": false
-
+            "justMyCode": false,
+            "args": []
         },
         {
             "name": "Python: Download Images",
