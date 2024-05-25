@@ -1,3 +1,4 @@
+import argparse
 import time
 from pathlib import Path
 
@@ -11,12 +12,13 @@ import torch
 from PIL import Image
 
 from chessvision.predict.classify_raw import classify_raw
-from chessvision.utils import DATA_ROOT, INPUT_SIZE, PIECE_SIZE, listdir_nohidden
+from chessvision.utils import DATA_ROOT, INPUT_SIZE, PIECE_SIZE, labels, listdir_nohidden
 
 TEST_DATA_DIR = Path(DATA_ROOT) / "test"
 
 PROJECT_NAME = "chessvision-testing"
 LABEL_NAMES = ["f", "P", "p", "R", "r", "N", "n", "B", "b", "Q", "q", "K", "k"]
+
 BLACK_BOARD = Image.fromarray(np.zeros(INPUT_SIZE).astype(np.uint8))
 BLACK_CROP = Image.fromarray(np.zeros(PIECE_SIZE).astype(np.uint8))
 
@@ -39,13 +41,21 @@ def top_k_sim(predictions, truth, k, names):
     top_k_predictions = np.array([["" for _ in range(k)] for _ in range(64)])
     hits = 0
 
+    true_labels = [truth[i] for i in range(64)]
+    for i in range(8):
+        true_labels[i * 8 : (i + 1) * 8] = list(reversed(true_labels[i * 8 : (i + 1) * 8]))
+    true_labels = list(reversed(true_labels))
+    truth = true_labels
+
     for i in range(64):
         for j in range(k):
-            top_k_predictions[i, j] = LABEL_NAMES[top_k[i, j]]
+            top_k_predictions[i, j] = labels[top_k[i, j]]
 
     for square_ind in range(64):
         if truth[square_ind] in top_k_predictions[square_ind]:
             hits += 1
+        else:
+            print(f"Square {square_ind}: Truth: {truth[square_ind]}, Top-{k}: {top_k_predictions[square_ind]}")
 
     return hits / 64
 
@@ -63,11 +73,11 @@ def vectorize_chessboard(board):
     return "".join(res)
 
 
-def get_test_generator(image_dir: Path = TEST_DATA_DIR):
+def get_test_generator(image_dir: Path):
     img_filenames = listdir_nohidden(image_dir)
     test_imgs = np.array([cv2.imread(str(image_dir / x)) for x in img_filenames])
 
-    for i in range(min(len(test_imgs), 5)):
+    for i in range(len(test_imgs)):
         yield img_filenames[i], test_imgs[i]
 
 
@@ -85,9 +95,12 @@ def run_tests(
     threshold=80,
     compute_metrics=True,
     create_table=False,
+    project_name=PROJECT_NAME,
+    dataset_name="dataset",
+    table_name="table",
 ) -> tlc.Run:
     if not run:
-        run = tlc.init(PROJECT_NAME)
+        run = tlc.init(project_name)
 
     data_generator = get_test_generator(image_folder)
 
@@ -95,11 +108,11 @@ def run_tests(
 
     if create_table:
         table_writer = tlc.TableWriter(
-            "table",
-            "dataset",
-            "projectfive",
+            table_name,
+            dataset_name,
+            project_name,
             column_schemas={
-                "raw_imgs": tlc.PILImage("raw_imgs"),
+                "raw_img": tlc.PILImage("raw_img"),
             },
             if_exists="rename",
         )
@@ -110,7 +123,7 @@ def run_tests(
         "rendered_board": tlc.Schema(value=tlc.ImageUrlStringValue("rendered_board")),
     }
     if not table_writer:
-        metrics_schemas.update({"raw_imgs": tlc.PILImage("raw_imgs")})
+        metrics_schemas.update({"raw_img": tlc.PILImage("raw_img")})
 
     metrics_writer = tlc.MetricsTableWriter(
         run.url,
@@ -145,7 +158,7 @@ def run_tests(
                 print(f"Failed to classify {filename}")
 
                 table_batch = {
-                    "raw_imgs": [Image.open(str(TEST_DATA_DIR / filename))],
+                    "raw_img": [Image.open(str(image_folder / filename))],
                 }
 
                 metrics_batch = {
@@ -158,7 +171,7 @@ def run_tests(
                 if table_writer:
                     table_writer.add_batch(table_batch)
                 else:
-                    metrics_batch["raw_imgs"] = table_batch["raw_imgs"]
+                    metrics_batch["raw_img"] = table_batch["raw_img"]
 
                 if compute_metrics:
                     metrics_batch["accuracy"] = [0]
@@ -183,7 +196,7 @@ def run_tests(
                 this_board_acc = accuracy(predicted_labels, true_labels)
                 test_accuracy += this_board_acc
 
-                labels_int = [LABEL_NAMES.index(label) for label in true_labels]
+                labels_int = [LABEL_NAMES.index(label) for label in truth]
                 for i in range(8):
                     labels_int[i * 8 : (i + 1) * 8] = list(reversed(labels_int[i * 8 : (i + 1) * 8]))
                 labels_int = list(reversed(labels_int))
@@ -201,7 +214,7 @@ def run_tests(
                 save_svg(chessboard, svg_url)
 
                 table_batch = {
-                    "raw_imgs": [Image.open(str(image_folder / filename))] * 64,
+                    "raw_img": [Image.open(str(image_folder / filename))] * 64,
                 }
                 metrics_batch = {
                     "predicted_masks": [Image.fromarray(mask.astype(np.uint8))] * 64,
@@ -216,7 +229,7 @@ def run_tests(
                 if table_writer:
                     table_writer.add_batch(table_batch)
                 else:
-                    metrics_batch["raw_imgs"] = table_batch["raw_imgs"]
+                    metrics_batch["raw_img"] = table_batch["raw_img"]
 
                 metrics_writer.add_batch(metrics_batch)
             else:
@@ -226,7 +239,7 @@ def run_tests(
                 save_svg(chessboard, svg_url)
 
                 table_batch = {
-                    "raw_imgs": [Image.open(str(image_folder / filename))],
+                    "raw_img": [Image.open(str(image_folder / filename))],
                 }
 
                 metrics_batch = {
@@ -239,7 +252,7 @@ def run_tests(
                 if table_writer:
                     table_writer.add_batch(table_batch)
                 else:
-                    metrics_batch["raw_imgs"] = table_batch["raw_imgs"]
+                    metrics_batch["raw_img"] = table_batch["raw_img"]
 
                 metrics_writer.add_batch(metrics_batch)
 
@@ -267,12 +280,35 @@ def run_tests(
     return run
 
 
+def parse_arts():
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("--image-folder", type=str, default=str(TEST_DATA_DIR / "raw"))
+    argparser.add_argument("--truth-folder", type=str, default=str(TEST_DATA_DIR / "ground_truth"))
+    argparser.add_argument("--create-table", action="store_true")
+    argparser.add_argument("--compute-metrics", action="store_true")
+    argparser.add_argument("--threshold", type=int, default=80)
+    argparser.add_argument("--project-name", type=str, default="chessvision-testing")
+    argparser.add_argument("--dataset-name", type=str, default="dataset")
+    argparser.add_argument("--table-name", type=str, default="table")
+
+    return argparser.parse_args()
+
+
 if __name__ == "__main__":
     print("Running ChessVision test suite...")
-
+    args = parse_arts()
     start = time.time()
-    image_folder = Path("C:/Project/ChessVision-3LC/output")
-    run = run_tests(compute_metrics=False, create_table=True)
+
+    run = run_tests(
+        image_folder=Path(args.image_folder),
+        truth_folder=Path(args.truth_folder),
+        compute_metrics=args.compute_metrics,
+        create_table=args.create_table,
+        project_name=args.project_name,
+        dataset_name=args.dataset_name,
+        table_name=args.table_name,
+        threshold=args.threshold,
+    )
     stop = time.time()
     print(f"Tests completed in {stop-start:.1f}s")
     if "test_results" in run.constants["parameters"]:

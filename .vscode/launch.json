@@ -21,8 +21,8 @@
             "justMyCode": false,
             "args": [
                 "--compute-embeddings",
-                "--description", "Run with class-balanced weights and upweighted incorrect samples",
-                "--run-name", "balanced-upweighted-run",
+                "--description", "Run with upweighted queens and downweighted low loss empty squares",
+                "--run-name", "queens-empty-squares",
                 "--run-tests",
             ],
             "env": {
@@ -58,7 +58,14 @@
             "program": "${workspaceFolder}/chessvision/test/test.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "args": []
+            "args": [
+                // "--create-table", 
+                "--compute-metrics",
+                "--project-name", "chessvision-testing",
+                // "--dataset-name", "testing-top-k",
+                // "--table-name", "17mai",
+                // "--image-folder=C:/Project/ChessVision-3LC/output"
+            ]
         },
         {
             "name": "Python: Download Images",
