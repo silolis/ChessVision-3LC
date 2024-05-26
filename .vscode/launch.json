@@ -21,8 +21,8 @@
             "justMyCode": false,
             "args": [
                 "--compute-embeddings",
-                "--description", "Run with upweighted queens and downweighted low loss empty squares",
-                "--run-name", "queens-empty-squares",
+                "--description", "Rerun base run",
+                "--run-name", "base-run-2",
                 "--run-tests",
             ],
             "env": {
