@@ -27,7 +27,7 @@ def accuracy(a, b):
     return sum([aa == bb for aa, bb in zip(a, b)]) / len(a)
 
 
-def top_k_sim(predictions, truth, k, names):
+def top_k_sim(predictions, truth, k):
     """
     predictions: (64, 13) probability distributions
     truth      : (64, 1)  true labels
@@ -45,17 +45,14 @@ def top_k_sim(predictions, truth, k, names):
     for i in range(8):
         true_labels[i * 8 : (i + 1) * 8] = list(reversed(true_labels[i * 8 : (i + 1) * 8]))
     true_labels = list(reversed(true_labels))
-    truth = true_labels
 
     for i in range(64):
         for j in range(k):
-            top_k_predictions[i, j] = labels[top_k[i, j]]
+            top_k_predictions[i, j] = list(labels.keys())[top_k[i, j]]
 
     for square_ind in range(64):
-        if truth[square_ind] in top_k_predictions[square_ind]:
+        if true_labels[square_ind] in top_k_predictions[square_ind]:
             hits += 1
-        else:
-            print(f"Square {square_ind}: Truth: {truth[square_ind]}, Top-{k}: {top_k_predictions[square_ind]}")
 
     return hits / 64
 
@@ -133,6 +130,7 @@ def run_tests(
 
     N = 0
     test_accuracy = 0.0
+    top_1_accuracy = 0.0
     top_2_accuracy = 0.0
     top_3_accuracy = 0.0
 
@@ -188,15 +186,16 @@ def run_tests(
                 with open(truth_file) as truth:
                     true_labels = truth.read()
 
-                top_2_accuracy += top_k_sim(predictions, true_labels, 2, names)
-                top_3_accuracy += top_k_sim(predictions, true_labels, 3, names)
+                top_1_accuracy += top_k_sim(predictions, true_labels, 1)
+                top_2_accuracy += top_k_sim(predictions, true_labels, 2)
+                top_3_accuracy += top_k_sim(predictions, true_labels, 3)
 
                 predicted_labels = vectorize_chessboard(chessboard)
 
                 this_board_acc = accuracy(predicted_labels, true_labels)
                 test_accuracy += this_board_acc
 
-                labels_int = [LABEL_NAMES.index(label) for label in truth]
+                labels_int = [LABEL_NAMES.index(label) for label in true_labels]
                 for i in range(8):
                     labels_int[i * 8 : (i + 1) * 8] = list(reversed(labels_int[i * 8 : (i + 1) * 8]))
                 labels_int = list(reversed(labels_int))
@@ -258,11 +257,13 @@ def run_tests(
 
     if compute_metrics:
         test_accuracy /= N
+        top_1_accuracy /= N
         top_2_accuracy /= N
         top_3_accuracy /= N
 
         aggregate_data = {
-            "top_1_accuracy": test_accuracy,
+            "top_1_accuracy": top_1_accuracy,
+            "accuracy": test_accuracy,
             "top_2_accuracy": top_2_accuracy,
             "top_3_accuracy": top_3_accuracy,
             "avg_time_per_prediction": sum(times) / N,
