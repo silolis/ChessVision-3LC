@@ -37,16 +37,11 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
-                "--epochs",
-                "1",
-                "--learning-rate",
-                "0.0000001",
-                "--classes",
-                "1",
-                "--scale",
-                "1",
-                "--batch-size",
-                "2",
+                "--epochs", "1",
+                "--learning-rate", "0.0000001",
+                "--classes", "1",
+                "--scale", "1",
+                "--batch-size", "2",
                 "--amp",
                 "--run-tests"
             ]

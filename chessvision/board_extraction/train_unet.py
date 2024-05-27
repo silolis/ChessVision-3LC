@@ -267,7 +267,7 @@ def train_model(
         tlc.log({"train_loss": epoch_loss / n_train, "epoch": epoch})
 
         # Collect per-sample metrics using tlc every 5 epochs
-        if epoch in [15]:
+        if epoch in [1]:
             predictor = tlc.Predictor(
                 model=model,
                 layers=[52],
