@@ -1,12 +1,9 @@
-3lc[umap,pacmap]
---extra-index-url https://download.pytorch.org/whl/cu118
+3lc[pacmap]
+# --extra-index-url https://download.pytorch.org/whl/cu118
 torchvision
-matplotlib
 jupyter
 ipywidgets
 Pillow
-mypy
-types-tqdm
 opencv-python
 python-chess
 timm

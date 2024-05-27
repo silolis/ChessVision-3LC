@@ -5,7 +5,7 @@ import timm
 import torch
 
 from chessvision.board_extraction.train_unet import load_checkpoint as load_extractor_checkpoint
-from chessvision.piece_classification.train_classifier import NUM_CLASSES
+from chessvision.piece_classification.train_classifier import NUM_CLASSES, get_classifier_model
 from chessvision.piece_classification.train_classifier import load_checkpoint as load_classifier_checkpoint
 from chessvision.predict.classify_board import classify_board
 from chessvision.predict.extract_board import extract_board
@@ -29,11 +29,7 @@ def load_classifier(checkpoint_path: str = best_classifier_weights):
         return sq_model
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    classifier = timm.create_model(
-        "resnet18",
-        num_classes=NUM_CLASSES,
-        in_chans=1,
-    )
+    classifier = get_classifier_model()
     classifier, _, _, _ = load_classifier_checkpoint(classifier, None, checkpoint_path)
     classifier.eval()
     classifier.to(device)

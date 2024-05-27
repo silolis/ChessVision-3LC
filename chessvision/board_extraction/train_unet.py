@@ -20,15 +20,15 @@ from chessvision.pytorch_unet.utils.dice_score import dice_loss
 from chessvision.utils import best_extractor_weights, extractor_weights_dir
 
 # Ensure dataset has been downloaded and exists at DATASET_ROOT. See playground.ipynb for details.
-DATASET_ROOT = "C:/Data/chessboard-segmentation"
+DATASET_ROOT = "/Users/gudbrand/Projects/ChessVision-3LC/data/board_extraction"
 tlc.register_url_alias(
     "CHESSVISION_SEGMENTATION_DATA_ROOT",
     DATASET_ROOT,
 )
-tlc.register_url_alias(
-    "CHESSVISION_SEGMENTATION_PROJECT_ROOT",
-    "C:/Users/gudbrand/AppData/Local/3LC/3LC/projects/chessboard-segmentation",
-)
+# tlc.register_url_alias(
+#     "CHESSVISION_SEGMENTATION_PROJECT_ROOT",
+#     "C:/Users/gudbrand/AppData/Local/3LC/3LC/projects/chessboard-segmentation",
+# )
 
 dir_img = Path(DATASET_ROOT) / "images/"
 dir_mask = Path(DATASET_ROOT) / "masks/"
@@ -38,7 +38,13 @@ dir_checkpoint = extractor_weights_dir
 
 
 def load_checkpoint(model: torch.nn.Module, checkpoint_path: str):
-    state_dict = torch.load(checkpoint_path)
+    if torch.cuda.is_available():
+        map_location = torch.device('cuda')
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        map_location = torch.device('mps')
+    else:
+        map_location = torch.device('cpu')
+    state_dict = torch.load(checkpoint_path, map_location=map_location)
     # del state_dict["mask_values"]
     model.load_state_dict(state_dict)
     logging.info(f"Model loaded from {checkpoint_path}")

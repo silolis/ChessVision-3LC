@@ -10,6 +10,7 @@ import numpy as np
 import tlc
 import torch
 from PIL import Image
+from tqdm import tqdm
 
 from chessvision.predict.classify_raw import classify_raw
 from chessvision.utils import DATA_ROOT, INPUT_SIZE, PIECE_SIZE, labels, listdir_nohidden
@@ -22,39 +23,41 @@ LABEL_NAMES = ["f", "P", "p", "R", "r", "N", "n", "B", "b", "Q", "q", "K", "k"]
 BLACK_BOARD = Image.fromarray(np.zeros(INPUT_SIZE).astype(np.uint8))
 BLACK_CROP = Image.fromarray(np.zeros(PIECE_SIZE).astype(np.uint8))
 
-
 def accuracy(a, b):
     return sum([aa == bb for aa, bb in zip(a, b)]) / len(a)
 
 
-def top_k_sim(predictions, truth, k):
+def top_k_accuracy(predictions, true_labels, k=3):
     """
     predictions: (64, 13) probability distributions
     truth      : (64, 1)  true labels
-    k          : is true label in top k predictions
+    k          : compute top-1, top-2, top-3 accuracies
 
-    returns    : fraction of the 64 squares are k-correctly classified
+    returns    : tuple containing accuracies for k=1, k=2, k=3
     """
-
     sorted_predictions = np.argsort(predictions, axis=1)
     top_k = sorted_predictions[:, -k:]
     top_k_predictions = np.array([["" for _ in range(k)] for _ in range(64)])
-    hits = 0
-
-    true_labels = [truth[i] for i in range(64)]
-    for i in range(8):
-        true_labels[i * 8 : (i + 1) * 8] = list(reversed(true_labels[i * 8 : (i + 1) * 8]))
-    true_labels = list(reversed(true_labels))
+    hits = [0] * k
 
     for i in range(64):
         for j in range(k):
             top_k_predictions[i, j] = list(labels.keys())[top_k[i, j]]
 
     for square_ind in range(64):
-        if true_labels[square_ind] in top_k_predictions[square_ind]:
-            hits += 1
+        for j in range(k):
+            if true_labels[square_ind] in top_k_predictions[square_ind, -j-1:]:
+                hits[j] += 1
 
-    return hits / 64
+    accuracies = [hit / 64 for hit in hits]
+    return tuple(accuracies)
+
+def snake(squares):
+    assert len(squares) == 64
+    for i in range(8):
+        squares[i * 8 : (i + 1) * 8] = list(reversed(squares[i * 8 : (i + 1) * 8]))
+    squares = list(reversed(squares))
+    return squares
 
 
 def vectorize_chessboard(board):
@@ -67,7 +70,7 @@ def vectorize_chessboard(board):
         if piece:
             res[i] = piece.symbol()
 
-    return "".join(res)
+    return res
 
 
 def get_test_generator(image_dir: Path):
@@ -120,7 +123,7 @@ def run_tests(
         "rendered_board": tlc.Schema(value=tlc.ImageUrlStringValue("rendered_board")),
     }
     if not table_writer:
-        metrics_schemas.update({"raw_img": tlc.PILImage("raw_img")})
+        metrics_schemas = {"raw_img": tlc.PILImage("raw_img"), **metrics_schemas}
 
     metrics_writer = tlc.MetricsTableWriter(
         run.url,
@@ -128,20 +131,17 @@ def run_tests(
         column_schemas=metrics_schemas,
     )
 
-    N = 0
-    test_accuracy = 0.0
     top_1_accuracy = 0.0
     top_2_accuracy = 0.0
     top_3_accuracy = 0.0
 
     times = []
+    test_set_size = len(listdir_nohidden(image_folder))
 
     with tlc.bulk_data_url_context(run.bulk_data_url):
-        for index, (filename, img) in enumerate(data_generator):
-            print(f"***Classifying test image {filename}***")
-            N += 1
+        for index, (filename, img) in tqdm(enumerate(data_generator), total=test_set_size, desc="Classifying images"):
             start = time.time()
-            board_img, mask, predictions, chessboard, _, squares, names = classify_raw(
+            board_img, mask, predictions, chessboard, _, squares, _ = classify_raw(
                 img,
                 filename,
                 extractor,
@@ -164,6 +164,7 @@ def run_tests(
                     "extracted_board": [BLACK_BOARD],
                     "rendered_board": [""],
                     "example_id": [index],
+                    "is_failed": [True],
                 }
 
                 if table_writer:
@@ -181,33 +182,28 @@ def run_tests(
                 continue
 
             if compute_metrics:
+
+                # Load the true labels
                 truth_file = truth_folder / (filename[:-4] + ".txt")
 
                 with open(truth_file) as truth:
                     true_labels = truth.read()
 
-                top_1_accuracy += top_k_sim(predictions, true_labels, 1)
-                top_2_accuracy += top_k_sim(predictions, true_labels, 2)
-                top_3_accuracy += top_k_sim(predictions, true_labels, 3)
+                true_labels = snake(list(true_labels))
+                true_labels_int = [LABEL_NAMES.index(label) for label in true_labels]
 
+                # Compute the accuracy
+                top_1, top_2, top_3 = top_k_accuracy(predictions, true_labels, k=3)
+                top_1_accuracy += top_1
+                top_2_accuracy += top_2
+                top_3_accuracy += top_3
+
+                # Register the predicted labels
                 predicted_labels = vectorize_chessboard(chessboard)
-
-                this_board_acc = accuracy(predicted_labels, true_labels)
-                test_accuracy += this_board_acc
-
-                labels_int = [LABEL_NAMES.index(label) for label in true_labels]
-                for i in range(8):
-                    labels_int[i * 8 : (i + 1) * 8] = list(reversed(labels_int[i * 8 : (i + 1) * 8]))
-                labels_int = list(reversed(labels_int))
-
+                predicted_labels = snake(predicted_labels)
                 predicted_labels_int = [LABEL_NAMES.index(label) for label in predicted_labels]
-                predicted_labels_int = list(reversed(predicted_labels_int))
 
-                for i in range(8):
-                    predicted_labels_int[i * 8 : (i + 1) * 8] = list(
-                        reversed(predicted_labels_int[i * 8 : (i + 1) * 8])
-                    )
-
+                # Write and register a rendered board image
                 svg_url = Path((run.bulk_data_url / "rendered_board" / (filename[:-4] + ".png")).to_str())
                 svg_url.parent.mkdir(parents=True, exist_ok=True)
                 save_svg(chessboard, svg_url)
@@ -219,16 +215,17 @@ def run_tests(
                     "predicted_masks": [Image.fromarray(mask.astype(np.uint8))] * 64,
                     "extracted_board": [Image.fromarray(board_img)] * 64,
                     "rendered_board": [str(svg_url)] * 64,
-                    "accuracy": [this_board_acc] * 64,
+                    "accuracy": [top_1] * 64,
                     "square_crop": [Image.fromarray(img.squeeze()) for img in squares],
-                    "true_labels": labels_int,
+                    "true_labels": true_labels_int,
                     "predicted_labels": predicted_labels_int,
                     "example_id": [index] * 64,
+                    "is_failed": [False] * 64,
                 }
                 if table_writer:
                     table_writer.add_batch(table_batch)
                 else:
-                    metrics_batch["raw_img"] = table_batch["raw_img"]
+                    metrics_batch = {"raw_img": table_batch["raw_img"], **metrics_batch}
 
                 metrics_writer.add_batch(metrics_batch)
             else:
@@ -246,34 +243,34 @@ def run_tests(
                     "extracted_board": [Image.fromarray(board_img)],
                     "rendered_board": [str(svg_url)],
                     "example_id": [index],
+                    "is_failed": [False],
                 }
 
                 if table_writer:
                     table_writer.add_batch(table_batch)
                 else:
-                    metrics_batch["raw_img"] = table_batch["raw_img"]
+                    metrics_batch = {"raw_img": table_batch["raw_img"], **metrics_batch}
 
                 metrics_writer.add_batch(metrics_batch)
 
     if compute_metrics:
-        test_accuracy /= N
-        top_1_accuracy /= N
-        top_2_accuracy /= N
-        top_3_accuracy /= N
+        top_1_accuracy /= test_set_size
+        top_2_accuracy /= test_set_size
+        top_3_accuracy /= test_set_size
 
         aggregate_data = {
-            "top_1_accuracy": top_1_accuracy,
-            "accuracy": test_accuracy,
-            "top_2_accuracy": top_2_accuracy,
-            "top_3_accuracy": top_3_accuracy,
-            "avg_time_per_prediction": sum(times) / N,
+            "top_1_accuracy": f"{top_1_accuracy: .3f}",
+            "top_2_accuracy": f"{top_2_accuracy: .3f}",
+            "top_3_accuracy": f"{top_3_accuracy: .3f}",
+            "avg_time_per_prediction": sum(times) / test_set_size,
         }
 
         run.set_parameters({"test_results": aggregate_data})
 
-    print(f"Classified {N} raw images")
+    print(f"Classified {test_set_size} raw images")
     metrics_table = metrics_writer.finalize()
     if table_writer:
+        print(f"Created table {table_writer.url}")
         table_writer.finalize()
     run.add_metrics_table(metrics_table)
     run.set_status_completed()

@@ -5,3 +5,4 @@ weights/
 .env
 Notes.md
 output/
+.DS_Store

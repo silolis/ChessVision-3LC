@@ -18,10 +18,11 @@ from chessvision.piece_classification.training_utils import EarlyStopping
 from chessvision.utils import classifier_weights_dir, label_names
 
 mp.set_start_method("spawn", force=True)
+
 CHECKPOINT_PATH = Path(classifier_weights_dir) / "checkpoint.pth"
 CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-DATASET_ROOT = "C:/Data/chessboard-squares"
+DATASET_ROOT = "/Users/gudbrand/Projects/ChessVision-3LC/data/squares"
 tlc.register_url_alias("CHESSPIECES_DATASET_ROOT", DATASET_ROOT)
 
 TRAIN_DATASET_PATH = DATASET_ROOT + "/training"
@@ -29,6 +30,16 @@ VAL_DATASET_PATH = DATASET_ROOT + "/validation"
 
 TRAIN_DATASET_NAME = "chesspieces-train"
 VAL_DATASET_NAME = "chesspieces-val"
+
+# Hyperparameters
+NUM_CLASSES = 13
+INITIAL_LR = 0.001
+LR_SCHEDULER_STEP_SIZE = 4
+LR_SCHEDULER_GAMMA = 0.1
+MAX_EPOCHS = 1
+EARLY_STOPPING_PATIENCE = 4
+HIDDEN_LAYER_INDEX = 90
+MODEL_ID = "resnet18"  # mobilenetv2_100'
 
 
 train_transforms = transforms.Compose(
@@ -113,19 +124,14 @@ def validate(model, val_loader, criterion, device):
     accuracy = 100.0 * correct / total
     return val_loss, accuracy
 
-
-# Hyperparameters
-NUM_CLASSES = 13
-INITIAL_LR = 0.001
-LR_SCHEDULER_STEP_SIZE = 4
-LR_SCHEDULER_GAMMA = 0.1
-MAX_EPOCHS = 10
-EARLY_STOPPING_PATIENCE = 4
-HIDDEN_LAYER_INDEX = 90
-
-
 def load_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer | None = None, filename="checkpoint.pth"):
-    checkpoint = torch.load(filename)
+    if torch.cuda.is_available():
+        map_location = torch.device('cuda')
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        map_location = torch.device('mps')
+    else:
+        map_location = torch.device('cpu')
+    checkpoint = torch.load(filename, map_location=map_location)
     model.load_state_dict(checkpoint["model_state_dict"])
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -153,7 +159,7 @@ def main(args):
     start = time.time()
     early_stopping = EarlyStopping(patience=EARLY_STOPPING_PATIENCE, verbose=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = timm.create_model("resnet18", num_classes=NUM_CLASSES, in_chans=1)
+    model = get_classifier_model()
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=INITIAL_LR)
@@ -173,6 +179,7 @@ def main(args):
         "LR_SCHEDULER_GAMMA": LR_SCHEDULER_GAMMA,
         "MAX_EPOCHS": MAX_EPOCHS,
         "EARLY_STOPPING_PATIENCE": EARLY_STOPPING_PATIENCE,
+        "MODEL_ID": MODEL_ID,
     }
 
     run = tlc.init(
@@ -320,11 +327,16 @@ def main(args):
 
         print("Running tests...")
         del model
-        model = timm.create_model("resnet18", num_classes=NUM_CLASSES, in_chans=1)
+        # Reload the model from the best epoch
+        model = get_classifier_model()
         model, _, _, _ = load_checkpoint(model, None, last_checkpoint)
         model.eval()
         model.to(device)
         run_tests(run=run, classifier=model)
+
+def get_classifier_model():
+    model = timm.create_model(MODEL_ID, num_classes=NUM_CLASSES, in_chans=1)
+    return model
 
 
 if __name__ == "__main__":
