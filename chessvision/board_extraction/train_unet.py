@@ -38,11 +38,11 @@ dir_checkpoint = extractor_weights_dir
 
 def load_checkpoint(model: torch.nn.Module, checkpoint_path: str):
     if torch.cuda.is_available():
-        map_location = torch.device('cuda')
-    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        map_location = torch.device('mps')
+        map_location = torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        map_location = torch.device("mps")
     else:
-        map_location = torch.device('cpu')
+        map_location = torch.device("cpu")
     state_dict = torch.load(checkpoint_path, map_location=map_location)
     # del state_dict["mask_values"]
     model.load_state_dict(state_dict)

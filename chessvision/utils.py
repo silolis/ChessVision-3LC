@@ -3,7 +3,7 @@ from pathlib import Path
 
 CVROOT = os.getenv("CVROOT", Path(__file__).parent.parent.as_posix())
 
-DATA_ROOT = os.path.join(CVROOT, "data")
+DATA_ROOT = (Path(CVROOT) / "data").as_posix()
 
 INPUT_SIZE = (256, 256)
 BOARD_SIZE = (512, 512)
@@ -42,11 +42,11 @@ label_names = [
     "Unknown",
 ]
 
-classifier_weights_dir = os.path.join(CVROOT, "weights", "classifier")
-extractor_weights_dir = os.path.join(CVROOT, "weights", "extractor")
+classifier_weights_dir = (Path(CVROOT) / "weights" / "classifier").as_posix()
+extractor_weights_dir = (Path(CVROOT) / "weights" / "extractor").as_posix()
 
-best_classifier_weights = os.path.join(CVROOT, "weights", "best_classifier.pth")
-best_extractor_weights = os.path.join(CVROOT, "weights", "best_extractor.pth")
+best_classifier_weights = (Path(CVROOT) / "weights" / "best_classifier.pth").as_posix()
+best_extractor_weights = (Path(CVROOT) / "weights" / "best_extractor.pth").as_posix()
 
 
 def listdir_nohidden(path):

@@ -36,10 +36,10 @@ NUM_CLASSES = 13
 INITIAL_LR = 0.001
 LR_SCHEDULER_STEP_SIZE = 4
 LR_SCHEDULER_GAMMA = 0.1
-MAX_EPOCHS = 1
+MAX_EPOCHS = 10
 EARLY_STOPPING_PATIENCE = 4
 HIDDEN_LAYER_INDEX = 90
-MODEL_ID = "resnet18"  # mobilenetv2_100
+MODEL_ID = "resnet18"
 
 
 train_transforms = transforms.Compose(
@@ -124,13 +124,14 @@ def validate(model, val_loader, criterion, device):
     accuracy = 100.0 * correct / total
     return val_loss, accuracy
 
+
 def load_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer | None = None, filename="checkpoint.pth"):
     if torch.cuda.is_available():
-        map_location = torch.device('cuda')
-    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        map_location = torch.device('mps')
+        map_location = torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        map_location = torch.device("mps")
     else:
-        map_location = torch.device('cpu')
+        map_location = torch.device("cpu")
     checkpoint = torch.load(filename, map_location=map_location)
     model.load_state_dict(checkpoint["model_state_dict"])
     if optimizer is not None:
@@ -191,30 +192,27 @@ def main(args):
     )
 
     # Create datasets
-    tlc_train_dataset = (
-        tlc.Table.from_torch_dataset(
-            dataset=train_dataset,
-            dataset_name=TRAIN_DATASET_NAME,
-            table_name="train",
-            structure=sample_structure,
-            project_name=args.project_name,
-        )
-        .map(train_map)
-        .map_collect_metrics(val_map)
-        .latest()
+    # tlc_train_table = tlc.Table.from_torch_dataset(
+    #     dataset=train_dataset,
+    #     dataset_name=TRAIN_DATASET_NAME,
+    #     table_name="train",
+    #     structure=sample_structure,
+    #     project_name=args.project_name,
+    # )
+    tlc_train_table = tlc.Table.from_url(
+        "C:/Users/gudbrand/AppData/Local/3LC/3LC/projects/chessvision-classification/datasets/chesspieces-train/tables/train-equal-weights",
     )
+    tlc_train_dataset = tlc_train_table.map(train_map).map_collect_metrics(val_map).latest()
 
-    tlc_val_dataset = (
-        tlc.Table.from_torch_dataset(
-            dataset=val_dataset,
-            dataset_name=VAL_DATASET_NAME,
-            table_name="val",
-            structure=sample_structure,
-            project_name=args.project_name,
-        )
-        .map(val_map)
-        .latest()
+    tlc_val_table = tlc.Table.from_torch_dataset(
+        dataset=val_dataset,
+        dataset_name=VAL_DATASET_NAME,
+        table_name="val",
+        structure=sample_structure,
+        project_name=args.project_name,
     )
+    # tlc_val_table = tlc.Table.from_url()
+    tlc_val_dataset = tlc_val_table.map(val_map).latest()
 
     print(f"Using training dataset: {tlc_train_dataset.url}")
     print(f"Using validation dataset: {tlc_val_dataset.url}")
@@ -333,6 +331,7 @@ def main(args):
         model.eval()
         model.to(device)
         run_tests(run=run, classifier=model)
+
 
 def get_classifier_model():
     model = timm.create_model(MODEL_ID, num_classes=NUM_CLASSES, in_chans=1)

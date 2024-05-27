@@ -20,9 +20,9 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
-                "--compute-embeddings",
+                // "--compute-embeddings",
                 "--description", "Rerun base run",
-                "--run-name", "base-run-2",
+                "--run-name", "rerun-base-run",
                 "--run-tests",
             ],
             "env": {
@@ -38,7 +38,7 @@
             "justMyCode": false,
             "args": [
                 "--epochs",
-                "20",
+                "1",
                 "--learning-rate",
                 "0.0000001",
                 "--classes",
@@ -48,7 +48,7 @@
                 "--batch-size",
                 "2",
                 "--amp",
-                // "--run-tests"
+                "--run-tests"
             ]
         },
         {
@@ -76,7 +76,6 @@
             "args": [
                 "--bucket", "chessvision-bucket",
                 "--start_date", "2024-05-17",
-                // "--boto_output",
                 "--output_folder", "${workspaceFolder}/output"
             ]
         }
