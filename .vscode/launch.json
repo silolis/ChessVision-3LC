@@ -20,7 +20,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
-                // "--compute-embeddings",
+                "--compute-embeddings",
                 "--description", "Rerun base run",
                 "--run-name", "rerun-base-run",
                 "--run-tests",
@@ -37,7 +37,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
-                "--epochs", "1",
+                "--epochs", "20",
                 "--learning-rate", "0.0000001",
                 "--classes", "1",
                 "--scale", "1",
