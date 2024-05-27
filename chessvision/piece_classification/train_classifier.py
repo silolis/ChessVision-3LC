@@ -15,14 +15,14 @@ import tqdm
 from torch.utils.data import DataLoader
 
 from chessvision.piece_classification.training_utils import EarlyStopping
-from chessvision.utils import classifier_weights_dir, label_names
+from chessvision.utils import DATA_ROOT, classifier_weights_dir, label_names
 
 mp.set_start_method("spawn", force=True)
 
 CHECKPOINT_PATH = Path(classifier_weights_dir) / "checkpoint.pth"
 CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-DATASET_ROOT = "/Users/gudbrand/Projects/ChessVision-3LC/data/squares"
+DATASET_ROOT = f"{DATA_ROOT}/squares"
 tlc.register_url_alias("CHESSPIECES_DATASET_ROOT", DATASET_ROOT)
 
 TRAIN_DATASET_PATH = DATASET_ROOT + "/training"
@@ -39,7 +39,7 @@ LR_SCHEDULER_GAMMA = 0.1
 MAX_EPOCHS = 1
 EARLY_STOPPING_PATIENCE = 4
 HIDDEN_LAYER_INDEX = 90
-MODEL_ID = "resnet18"  # mobilenetv2_100'
+MODEL_ID = "resnet18"  # mobilenetv2_100
 
 
 train_transforms = transforms.Compose(

@@ -17,18 +17,17 @@ from chessvision.pytorch_unet.evaluate import evaluate
 from chessvision.pytorch_unet.unet import UNet
 from chessvision.pytorch_unet.utils.data_loading import BasicDataset
 from chessvision.pytorch_unet.utils.dice_score import dice_loss
-from chessvision.utils import best_extractor_weights, extractor_weights_dir
+from chessvision.utils import DATA_ROOT, best_extractor_weights, extractor_weights_dir
 
-# Ensure dataset has been downloaded and exists at DATASET_ROOT. See playground.ipynb for details.
-DATASET_ROOT = "/Users/gudbrand/Projects/ChessVision-3LC/data/board_extraction"
+DATASET_ROOT = f"{DATA_ROOT}/board_extraction"
 tlc.register_url_alias(
     "CHESSVISION_SEGMENTATION_DATA_ROOT",
     DATASET_ROOT,
 )
-# tlc.register_url_alias(
-#     "CHESSVISION_SEGMENTATION_PROJECT_ROOT",
-#     "C:/Users/gudbrand/AppData/Local/3LC/3LC/projects/chessboard-segmentation",
-# )
+tlc.register_url_alias(
+    "CHESSVISION_SEGMENTATION_PROJECT_ROOT",
+    f"{tlc.Configuration.instance().project_root_url}/chessboard-segmentation",
+)
 
 dir_img = Path(DATASET_ROOT) / "images/"
 dir_mask = Path(DATASET_ROOT) / "masks/"
@@ -118,6 +117,8 @@ def train_model(
     weight_decay: float = 1e-8,
     momentum: float = 0.999,
     gradient_clipping: float = 1.0,
+    project_name: str = "chessvision-segmentation",
+    run_name: str | None = None,
 ):
     # 1. Create dataset
     dataset = BasicDataset(dir_img, dir_mask, img_scale)
@@ -128,7 +129,7 @@ def train_model(
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
     # 2.1 Create 3LC datasets & training run
-    run = tlc.init("chessvision-segmentation", "base-run")
+    run = tlc.init(project_name, run_name)
 
     sample_structure = {
         "image": tlc.PILImage("image"),
@@ -276,7 +277,7 @@ def train_model(
                 LossCollector(),
                 tlc.SegmentationMetricsCollector(
                     label_map={0: "background", 255: "chessboard"},
-                    preprocess_fn=PrepareModelOutputsForLogging(threshold=0.75),
+                    preprocess_fn=PrepareModelOutputsForLogging(threshold=0.8),
                 ),
                 tlc.EmbeddingsMetricsCollector(layers=[52], reshape_strategy={52: "mean"}),
             ]
@@ -329,6 +330,8 @@ def get_args():
     parser.add_argument("--bilinear", action="store_true", default=False, help="Use bilinear upsampling")
     parser.add_argument("--classes", "-c", type=int, default=2, help="Number of classes")
     parser.add_argument("--run-tests", action="store_true", help="Run the test suite after training")
+    parser.add_argument("--project-name", type=str, default="chessvision-segmentation", help="3LC project name")
+    parser.add_argument("--run-name", type=str, default=None, help="3LC run name")
 
     return parser.parse_args()
 
@@ -367,6 +370,8 @@ if __name__ == "__main__":
         img_scale=args.scale,
         val_percent=args.val / 100,
         amp=args.amp,
+        project_name=args.project_name,
+        run_name=args.run_name,
     )
     if args.run_tests:
         from chessvision.test import run_tests
