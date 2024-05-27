@@ -1,0 +1,13 @@
+{
+    "jupyter.debugJustMyCode": false,
+    "editor.formatOnSave": false,
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports.ruff": "explicit"
+        },
+        "editor.defaultFormatter": "charliermarsh.ruff",
+      },
+    "python.envFile": "${workspaceFolder}/.env",
+    "mypy.runUsingActiveInterpreter": true,
+}

@@ -1,0 +1,4 @@
+[submodule "chessvision/pytorch_unet"]
+	path = chessvision/pytorch_unet
+	url = https://github.com/gudbrandtandberg/Pytorch-UNet
+	branch = experimental
