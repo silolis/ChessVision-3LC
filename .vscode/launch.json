@@ -21,8 +21,8 @@
             "justMyCode": false,
             "args": [
                 "--compute-embeddings",
-                "--description", "Rerun base run",
-                "--run-name", "rerun-base-run",
+                "--description", "",
+                "--run-name", "",
                 "--run-tests",
             ],
             "env": {

@@ -192,17 +192,15 @@ def main(args):
     )
 
     # Create datasets
-    # tlc_train_table = tlc.Table.from_torch_dataset(
-    #     dataset=train_dataset,
-    #     dataset_name=TRAIN_DATASET_NAME,
-    #     table_name="train",
-    #     structure=sample_structure,
-    #     project_name=args.project_name,
-    # )
-    tlc_train_table = tlc.Table.from_url(
-        "C:/Users/gudbrand/AppData/Local/3LC/3LC/projects/chessvision-classification/datasets/chesspieces-train/tables/train-equal-weights",
+    tlc_train_table = tlc.Table.from_torch_dataset(
+        dataset=train_dataset,
+        dataset_name=TRAIN_DATASET_NAME,
+        table_name="train",
+        structure=sample_structure,
+        project_name=args.project_name,
     )
-    tlc_train_dataset = tlc_train_table.map(train_map).map_collect_metrics(val_map).latest()
+
+    tlc_train_dataset = tlc_train_table.map(train_map).map_collect_metrics(val_map).revision()
 
     tlc_val_table = tlc.Table.from_torch_dataset(
         dataset=val_dataset,
@@ -211,8 +209,8 @@ def main(args):
         structure=sample_structure,
         project_name=args.project_name,
     )
-    # tlc_val_table = tlc.Table.from_url()
-    tlc_val_dataset = tlc_val_table.map(val_map).latest()
+
+    tlc_val_dataset = tlc_val_table.map(val_map).revision()
 
     print(f"Using training dataset: {tlc_train_dataset.url}")
     print(f"Using validation dataset: {tlc_val_dataset.url}")
