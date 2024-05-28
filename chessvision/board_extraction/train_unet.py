@@ -17,7 +17,7 @@ from chessvision.pytorch_unet.evaluate import evaluate
 from chessvision.pytorch_unet.unet import UNet
 from chessvision.pytorch_unet.utils.data_loading import BasicDataset
 from chessvision.pytorch_unet.utils.dice_score import dice_loss
-from chessvision.utils import DATA_ROOT, best_extractor_weights, extractor_weights_dir
+from chessvision.utils import DATA_ROOT, best_extractor_weights, extractor_weights_dir, get_device
 
 DATASET_ROOT = f"{DATA_ROOT}/board_extraction"
 tlc.register_url_alias(
@@ -37,13 +37,8 @@ dir_checkpoint = extractor_weights_dir
 
 
 def load_checkpoint(model: torch.nn.Module, checkpoint_path: str):
-    if torch.cuda.is_available():
-        map_location = torch.device("cuda")
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        map_location = torch.device("mps")
-    else:
-        map_location = torch.device("cpu")
-    state_dict = torch.load(checkpoint_path, map_location=map_location)
+    device = get_device()
+    state_dict = torch.load(checkpoint_path, map_location=device)
     # del state_dict["mask_values"]
     model.load_state_dict(state_dict)
     logging.info(f"Model loaded from {checkpoint_path}")
@@ -340,7 +335,7 @@ if __name__ == "__main__":
     args = get_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     logging.info(f"Using device {device}")
 
     # Change here to adapt to your data

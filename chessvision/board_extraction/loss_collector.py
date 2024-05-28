@@ -5,12 +5,13 @@ import torch
 import torch.nn as nn
 
 from chessvision.pytorch_unet.utils.dice_score import dice_loss
+from chessvision.utils import get_device
 
 
 class LossCollector(tlc.MetricsCollector):
     def __init__(self):
         super().__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = get_device()
 
     def compute_metrics(self, batch, predictor_output) -> dict[str, Any]:
         predictions = predictor_output.forward

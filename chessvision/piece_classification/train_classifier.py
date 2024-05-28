@@ -15,7 +15,7 @@ import tqdm
 from torch.utils.data import DataLoader
 
 from chessvision.piece_classification.training_utils import EarlyStopping
-from chessvision.utils import DATA_ROOT, classifier_weights_dir, label_names
+from chessvision.utils import DATA_ROOT, classifier_weights_dir, get_device, label_names
 
 mp.set_start_method("spawn", force=True)
 
@@ -126,13 +126,8 @@ def validate(model, val_loader, criterion, device):
 
 
 def load_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer | None = None, filename="checkpoint.pth"):
-    if torch.cuda.is_available():
-        map_location = torch.device("cuda")
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        map_location = torch.device("mps")
-    else:
-        map_location = torch.device("cpu")
-    checkpoint = torch.load(filename, map_location=map_location)
+    device = get_device()
+    checkpoint = torch.load(filename, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -159,7 +154,7 @@ def main(args):
     # Training variables
     start = time.time()
     early_stopping = EarlyStopping(patience=EARLY_STOPPING_PATIENCE, verbose=True)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     model = get_classifier_model()
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()

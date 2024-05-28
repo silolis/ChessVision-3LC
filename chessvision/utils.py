@@ -61,3 +61,16 @@ def ratio(a, b):
     if a == 0 or b == 0:
         return -1
     return min(a, b) / float(max(a, b))
+
+
+def get_device():
+    import torch
+
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+
+    return device

@@ -12,9 +12,9 @@ import cv2
 import numpy as np
 import torch
 
-from ..utils import BOARD_SIZE, ratio
+from ..utils import BOARD_SIZE, get_device, ratio
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = get_device()
 
 
 def extract_board(image, orig, model, threshold=80):
