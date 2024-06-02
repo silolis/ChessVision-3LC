@@ -87,7 +87,7 @@ class AugmentImages:
 
 
 class PrepareModelOutputsForLogging:
-    def __init__(self, threshold: float = 0.5):
+    def __init__(self, threshold: float = 0.3):
         self.threshold = threshold
 
     def __call__(self, batch, predictor_output: tlc.PredictorOutput):
@@ -138,7 +138,7 @@ def train_model(
             structure=sample_structure,
         )
         .map(TransformSampleToModel())
-        .latest()
+        .revision()
     )
 
     tlc_train_dataset = (
@@ -148,7 +148,7 @@ def train_model(
             structure=sample_structure,
         )
         .map(TransformSampleToModel())
-        .latest()
+        .revision()
     )
     # .map(AugmentImages())
 
@@ -256,13 +256,14 @@ def train_model(
         if save_checkpoint and val_score > best_val_score:
             best_val_score = val_score
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
-            _save_checkpoint(model, str(Path(dir_checkpoint) / f"checkpoint_epoch{epoch}.pth"))
+            checkpoint_path = str(Path(dir_checkpoint) / f"checkpoint_epoch{epoch}.pth")
+            _save_checkpoint(model, checkpoint_path)
             logging.info(f"Checkpoint {epoch} saved! (Dice score: {best_val_score})")
 
         tlc.log({"train_loss": epoch_loss / n_train, "epoch": epoch})
 
         # Collect per-sample metrics using tlc every 5 epochs
-        if epoch in [1]:
+        if epoch in [10, 20]:
             predictor = tlc.Predictor(
                 model=model,
                 layers=[52],
@@ -272,7 +273,7 @@ def train_model(
                 LossCollector(),
                 tlc.SegmentationMetricsCollector(
                     label_map={0: "background", 255: "chessboard"},
-                    preprocess_fn=PrepareModelOutputsForLogging(threshold=0.8),
+                    preprocess_fn=PrepareModelOutputsForLogging(threshold=0.3),
                 ),
                 tlc.EmbeddingsMetricsCollector(layers=[52], reshape_strategy={52: "mean"}),
             ]
@@ -301,7 +302,7 @@ def train_model(
         method="pacmap",
         n_components=2,
     )
-    return run
+    return run, checkpoint_path
 
 
 def get_args():
@@ -356,7 +357,7 @@ if __name__ == "__main__":
 
     model.to(device=device)
 
-    run = train_model(
+    run, checkpoint_path = train_model(
         model=model,
         epochs=args.epochs,
         batch_size=args.batch_size,
@@ -370,5 +371,12 @@ if __name__ == "__main__":
     )
     if args.run_tests:
         from chessvision.test import run_tests
+
+        del model
+
+        model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+        model = model.to(memory_format=torch.channels_last)
+        model = load_checkpoint(model, checkpoint_path)
+        model.to(device=device)
 
         run_tests(run=run, extractor=model)

@@ -46,10 +46,9 @@ def extract_board(image, orig, model, threshold=80):
 
 
 def fix_mask(mask, threshold=80):
-    mask *= 255
-    mask = mask.astype(np.uint8)
     mask[mask > threshold] = 255
     mask[mask <= threshold] = 0
+    mask = mask.astype(np.uint8)
     return mask
 
 

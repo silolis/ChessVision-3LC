@@ -62,7 +62,7 @@ def classify_raw(
     board_model=None,
     sq_model=None,
     flip=False,
-    threshold=80,
+    threshold=0.3,
 ):
     logger.debug(f"Processing image {filename}")
 

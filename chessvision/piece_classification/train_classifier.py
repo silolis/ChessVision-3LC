@@ -137,7 +137,6 @@ def load_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer | N
 
 
 def save_checkpoint(model, optimizer, epoch, best_val_loss, filename="checkpoint.pth") -> str:
-    filename = filename[:-4] + f"_{epoch}.pth" if epoch > 0 else filename
     torch.save(
         {
             "epoch": epoch,
@@ -162,6 +161,7 @@ def main(args):
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=LR_SCHEDULER_STEP_SIZE, gamma=LR_SCHEDULER_GAMMA)
     start_epoch = 0
     best_val_loss = float("inf")
+    best_val_accuracy = 0.0
     last_checkpoint = ""
 
     if CHECKPOINT_PATH.exists() and args.resume:
@@ -195,7 +195,7 @@ def main(args):
         project_name=args.project_name,
     )
 
-    tlc_train_dataset = tlc_train_table.map(train_map).map_collect_metrics(val_map).revision()
+    tlc_train_dataset = tlc_train_table.map(train_map).map_collect_metrics(val_map).revision(None)
 
     tlc_val_table = tlc.Table.from_torch_dataset(
         dataset=val_dataset,
@@ -211,11 +211,11 @@ def main(args):
     print(f"Using validation dataset: {tlc_val_dataset.url}")
 
     # Create data loaders
-    sampler = tlc_train_dataset.create_sampler()
+    sampler = tlc_train_dataset.create_sampler() if args.use_sample_weights else None
     train_data_loader = DataLoader(
         tlc_train_dataset,
         batch_size=32,
-        shuffle=False,
+        shuffle=False if sampler else True,
         sampler=sampler,
         num_workers=4,
         pin_memory=True,
@@ -271,10 +271,19 @@ def main(args):
             f"Val Acc: {val_acc:.2f}%"
         )
 
-        if val_loss < best_val_loss:
+        if val_acc > best_val_accuracy:
             best_val_loss = val_loss
+            best_val_accuracy = val_acc
             print("Saving model...")
-            last_checkpoint = save_checkpoint(model, optimizer, epoch, best_val_loss, str(CHECKPOINT_PATH))
+            checkpoint_path = run.bulk_data_url / "checkpoint.pth"
+            Path(run.bulk_data_url._normalized_path).mkdir(parents=True, exist_ok=True)
+            last_checkpoint = save_checkpoint(
+                model,
+                optimizer,
+                epoch,
+                best_val_loss,
+                str(checkpoint_path),
+            )
 
         early_stopping(val_loss, model)
 
@@ -313,6 +322,13 @@ def main(args):
         print("Reducing embeddings...")
         run.reduce_embeddings_per_dataset(n_components=2, method="pacmap", delete_source_tables=True)
 
+    run.set_parameters(
+        {
+            "model_path": last_checkpoint,
+            "best_val_accuracy": best_val_accuracy,
+            "use_sample_weights": args.use_sample_weights,
+        }
+    )
     if args.run_tests:
         from chessvision.test import run_tests
 
@@ -339,5 +355,6 @@ if __name__ == "__main__":
     argparser.add_argument("--compute-embeddings", action="store_true")
     argparser.add_argument("--resume", action="store_true")
     argparser.add_argument("--run-tests", action="store_true")
+    argparser.add_argument("--use-sample-weights", action="store_true")
     args = argparser.parse_args()
     main(args)
