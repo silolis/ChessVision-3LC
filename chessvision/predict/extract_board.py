@@ -17,7 +17,7 @@ from ..utils import BOARD_SIZE, get_device, ratio
 device = get_device()
 
 
-def extract_board(image, orig, model, threshold=80):
+def extract_board(image, orig, model, threshold=0.3):
     image_batch = torch.Tensor(np.array([image])) / 255
     image_batch = image_batch.permute(0, 3, 1, 2).to(device)
 
@@ -45,7 +45,7 @@ def extract_board(image, orig, model, threshold=80):
     return board, probabilities
 
 
-def fix_mask(mask, threshold=80):
+def fix_mask(mask, threshold=0.3):
     mask[mask > threshold] = 255
     mask[mask <= threshold] = 0
     mask = mask.astype(np.uint8)

@@ -273,7 +273,7 @@ def train_model(
                 LossCollector(),
                 tlc.SegmentationMetricsCollector(
                     label_map={0: "background", 255: "chessboard"},
-                    preprocess_fn=PrepareModelOutputsForLogging(threshold=0.3),
+                    preprocess_fn=PrepareModelOutputsForLogging(),
                 ),
                 tlc.EmbeddingsMetricsCollector(layers=[52], reshape_strategy={52: "mean"}),
             ]
@@ -328,6 +328,7 @@ def get_args():
     parser.add_argument("--run-tests", action="store_true", help="Run the test suite after training")
     parser.add_argument("--project-name", type=str, default="chessvision-segmentation", help="3LC project name")
     parser.add_argument("--run-name", type=str, default=None, help="3LC run name")
+    parser.add_argument("--threshold", type=float, default=0.3, help="Threshold for binarizing the output masks")
 
     return parser.parse_args()
 
@@ -339,9 +340,6 @@ if __name__ == "__main__":
     device = get_device()
     logging.info(f"Using device {device}")
 
-    # Change here to adapt to your data
-    # n_channels=3 for RGB images
-    # n_classes is the number of probabilities you want to get per pixel
     model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
     model = model.to(memory_format=torch.channels_last)
 
@@ -379,4 +377,4 @@ if __name__ == "__main__":
         model = load_checkpoint(model, checkpoint_path)
         model.to(device=device)
 
-        run_tests(run=run, extractor=model)
+        run_tests(run=run, extractor=model, threshold=args.threshold)
