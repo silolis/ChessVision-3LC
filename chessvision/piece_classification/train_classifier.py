@@ -15,15 +15,14 @@ import tqdm
 from torch.utils.data import DataLoader
 
 from chessvision.piece_classification.training_utils import EarlyStopping
-from chessvision.utils import DATA_ROOT, classifier_weights_dir, get_device, label_names
+from chessvision.utils import DATA_ROOT, get_device, label_names
 
 mp.set_start_method("spawn", force=True)
 
-CHECKPOINT_PATH = Path(classifier_weights_dir) / "checkpoint.pth"
-CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 DATASET_ROOT = f"{DATA_ROOT}/squares"
 tlc.register_url_alias("CHESSPIECES_DATASET_ROOT", DATASET_ROOT)
+tlc.register_url_alias("PROJECT_ROOT", tlc.Configuration.instance().project_root_url)
 
 TRAIN_DATASET_PATH = DATASET_ROOT + "/training"
 VAL_DATASET_PATH = DATASET_ROOT + "/validation"
@@ -162,11 +161,10 @@ def main(args):
     start_epoch = 0
     best_val_loss = float("inf")
     best_val_accuracy = 0.0
-    last_checkpoint = ""
 
-    if CHECKPOINT_PATH.exists() and args.resume:
-        model, optimizer, start_epoch, best_val_loss = load_checkpoint(model, optimizer, str(CHECKPOINT_PATH))
-        start_epoch += 1  # Increment to continue from next epoch
+    # if CHECKPOINT_PATH.exists() and args.resume:
+    #     model, optimizer, start_epoch, best_val_loss = load_checkpoint(model, optimizer, str(CHECKPOINT_PATH))
+    #     start_epoch += 1  # Increment to continue from next epoch
 
     # Create a Run object
     run_parameters = {
@@ -186,6 +184,9 @@ def main(args):
         if_exists="reuse" if args.resume else "rename",
     )
 
+    checkpoint_path = run.bulk_data_url / "checkpoint.pth"
+    checkpoint_path.make_parents(True)
+
     # Create datasets
     tlc_train_table = tlc.Table.from_torch_dataset(
         dataset=train_dataset,
@@ -195,7 +196,13 @@ def main(args):
         project_name=args.project_name,
     )
 
-    tlc_train_dataset = tlc_train_table.map(train_map).map_collect_metrics(val_map).revision(None)
+    tlc_train_dataset = (
+        tlc_train_table.map(train_map)
+        .map_collect_metrics(val_map)
+        .revision(
+            None,
+        )
+    )
 
     tlc_val_table = tlc.Table.from_torch_dataset(
         dataset=val_dataset,
@@ -275,9 +282,7 @@ def main(args):
             best_val_loss = val_loss
             best_val_accuracy = val_acc
             print("Saving model...")
-            checkpoint_path = run.bulk_data_url / "checkpoint.pth"
-            Path(run.bulk_data_url._normalized_path).mkdir(parents=True, exist_ok=True)
-            last_checkpoint = save_checkpoint(
+            save_checkpoint(
                 model,
                 optimizer,
                 epoch,
@@ -324,7 +329,7 @@ def main(args):
 
     run.set_parameters(
         {
-            "model_path": last_checkpoint,
+            "model_path": checkpoint_path.apply_aliases().to_str(),
             "best_val_accuracy": best_val_accuracy,
             "use_sample_weights": args.use_sample_weights,
         }
@@ -336,7 +341,7 @@ def main(args):
         del model
         # Reload the model from the best epoch
         model = get_classifier_model()
-        model, _, _, _ = load_checkpoint(model, None, last_checkpoint)
+        model, _, _, _ = load_checkpoint(model, None, checkpoint_path.to_str())
         model.eval()
         model.to(device)
         run_tests(run=run, classifier=model)
