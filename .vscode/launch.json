@@ -21,10 +21,10 @@
             "justMyCode": false,
             "args": [
                 "--compute-embeddings",
-                "--description", "base",
-                "--run-name", "base",
-                "--run-tests",
-                "--use-sample-weights",
+                "--description", "",
+                "--run-name", "",
+                // "--run-tests",
+                // "--use-sample-weights",
             ],
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/training",
@@ -44,8 +44,9 @@
                 "--scale", "1",
                 "--batch-size", "2",
                 "--amp",
-                "--run-tests",
+                // "--run-tests",
                 "--threshold", "0.3",
+                // "--use-sample-weights",
             ]
         },
         {

@@ -26,14 +26,13 @@ tlc.register_url_alias(
 )
 tlc.register_url_alias(
     "CHESSVISION_SEGMENTATION_PROJECT_ROOT",
-    f"{tlc.Configuration.instance().project_root_url}/chessboard-segmentation",
+    f"{tlc.Configuration.instance().project_root_url}/chessvision-segmentation",
 )
 
 dir_img = Path(DATASET_ROOT) / "images/"
 dir_mask = Path(DATASET_ROOT) / "masks/"
 assert dir_img.exists()
 assert dir_mask.exists()
-dir_checkpoint = extractor_weights_dir
 
 
 def load_checkpoint(model: torch.nn.Module, checkpoint_path: str):
@@ -114,6 +113,7 @@ def train_model(
     gradient_clipping: float = 1.0,
     project_name: str = "chessvision-segmentation",
     run_name: str | None = None,
+    use_sample_weights: bool = False,
 ):
     # 1. Create dataset
     dataset = BasicDataset(dir_img, dir_mask, img_scale)
@@ -124,7 +124,15 @@ def train_model(
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
     # 2.1 Create 3LC datasets & training run
-    run = tlc.init(project_name, run_name)
+    parameters = {
+        "epochs": epochs,
+        "batch_size": batch_size,
+    }
+    run = tlc.init(project_name, run_name, parameters=parameters)
+
+    # Write checkpoints in the run directory
+    checkpoint_path = run.bulk_data_url / "checkpoint.pth"
+    checkpoint_path.make_parents(True)  # !?
 
     sample_structure = {
         "image": tlc.PILImage("image"),
@@ -138,7 +146,7 @@ def train_model(
             structure=sample_structure,
         )
         .map(TransformSampleToModel())
-        .revision()
+        .revision(None)
     )
 
     tlc_train_dataset = (
@@ -148,9 +156,8 @@ def train_model(
             structure=sample_structure,
         )
         .map(TransformSampleToModel())
-        .revision()
+        .revision(None)
     )
-    # .map(AugmentImages())
 
     print(f"Using training table {tlc_train_dataset.url}")
     print(f"Using validation table {tlc_val_dataset.url}")
@@ -159,8 +166,8 @@ def train_model(
     loader_args = {"batch_size": batch_size, "num_workers": 0, "pin_memory": True}
     train_loader = DataLoader(
         tlc_train_dataset,
-        shuffle=False,
-        sampler=tlc_train_dataset.create_sampler(),
+        shuffle=False if use_sample_weights else True,
+        sampler=tlc_train_dataset.create_sampler() if use_sample_weights else None,
         **loader_args,
     )
     val_loader = DataLoader(
@@ -172,15 +179,16 @@ def train_model(
 
     logging.info(
         f"""Starting training:
-        Epochs:          {epochs}
-        Batch size:      {batch_size}
-        Learning rate:   {learning_rate}
-        Training size:   {n_train}
-        Validation size: {n_val}
-        Checkpoints:     {save_checkpoint}
-        Device:          {device.type}
-        Images scaling:  {img_scale}
-        Mixed Precision: {amp}
+        Epochs:           {epochs}
+        Batch size:       {batch_size}
+        Learning rate:    {learning_rate}
+        Training size:    {n_train}
+        Validation size:  {n_val}
+        Checkpoints:      {save_checkpoint}
+        Device:           {device.type}
+        Images scaling:   {img_scale}
+        Mixed Precision:  {amp}
+        Sampling weights: {args.use_sample_weights}
     """
     )
 
@@ -254,9 +262,7 @@ def train_model(
                         logging.info(f"Validation Dice score: {val_score}")
 
         if save_checkpoint and val_score > best_val_score:
-            best_val_score = val_score
-            Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
-            checkpoint_path = str(Path(dir_checkpoint) / f"checkpoint_epoch{epoch}.pth")
+            best_val_score = val_score.item()
             _save_checkpoint(model, checkpoint_path)
             logging.info(f"Checkpoint {epoch} saved! (Dice score: {best_val_score})")
 
@@ -302,6 +308,14 @@ def train_model(
         method="pacmap",
         n_components=2,
     )
+
+    run.set_parameters(
+        {
+            "best_val_score": best_val_score,
+            "model_path": checkpoint_path.apply_aliases().to_str(),
+            "use_sample_weights": use_sample_weights,
+        }
+    )
     return run, checkpoint_path
 
 
@@ -329,6 +343,7 @@ def get_args():
     parser.add_argument("--project-name", type=str, default="chessvision-segmentation", help="3LC project name")
     parser.add_argument("--run-name", type=str, default=None, help="3LC run name")
     parser.add_argument("--threshold", type=float, default=0.3, help="Threshold for binarizing the output masks")
+    parser.add_argument("--use-sample-weights", action="store_true", help="Use a weighted sampler")
 
     return parser.parse_args()
 
@@ -337,6 +352,7 @@ if __name__ == "__main__":
     args = get_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
     device = get_device()
     logging.info(f"Using device {device}")
 
@@ -348,6 +364,7 @@ if __name__ == "__main__":
         f"\t{model.n_channels} input channels\n"
         f"\t{model.n_classes} output channels (classes)\n"
         f'\t{"Bilinear" if model.bilinear else "Transposed conv"} upscaling'
+        f'\t{"Device: " + str(device)}'
     )
 
     if args.load:
@@ -366,6 +383,7 @@ if __name__ == "__main__":
         amp=args.amp,
         project_name=args.project_name,
         run_name=args.run_name,
+        use_sample_weights=args.use_sample_weights,
     )
     if args.run_tests:
         from chessvision.test import run_tests

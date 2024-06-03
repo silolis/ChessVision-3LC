@@ -22,7 +22,7 @@ mp.set_start_method("spawn", force=True)
 
 DATASET_ROOT = f"{DATA_ROOT}/squares"
 tlc.register_url_alias("CHESSPIECES_DATASET_ROOT", DATASET_ROOT)
-tlc.register_url_alias("PROJECT_ROOT", tlc.Configuration.instance().project_root_url)
+tlc.register_url_alias("PROJECT_ROOT", str(tlc.Configuration.instance().project_root_url))
 
 TRAIN_DATASET_PATH = DATASET_ROOT + "/training"
 VAL_DATASET_PATH = DATASET_ROOT + "/validation"
@@ -32,6 +32,7 @@ VAL_DATASET_NAME = "chesspieces-val"
 
 # Hyperparameters
 NUM_CLASSES = 13
+BATCH_SIZE = 32
 INITIAL_LR = 0.001
 LR_SCHEDULER_STEP_SIZE = 4
 LR_SCHEDULER_GAMMA = 0.1
@@ -39,7 +40,6 @@ MAX_EPOCHS = 10
 EARLY_STOPPING_PATIENCE = 4
 HIDDEN_LAYER_INDEX = 90
 MODEL_ID = "resnet18"
-
 
 train_transforms = transforms.Compose(
     [
@@ -135,7 +135,7 @@ def load_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer | N
     return model, optimizer, epoch, best_val_loss
 
 
-def save_checkpoint(model, optimizer, epoch, best_val_loss, filename="checkpoint.pth") -> str:
+def save_checkpoint(model, optimizer, epoch=None, best_val_loss=None, filename="checkpoint.pth") -> str:
     torch.save(
         {
             "epoch": epoch,
@@ -174,6 +174,7 @@ def main(args):
         "MAX_EPOCHS": MAX_EPOCHS,
         "EARLY_STOPPING_PATIENCE": EARLY_STOPPING_PATIENCE,
         "MODEL_ID": MODEL_ID,
+        "BATCH_SIZE": BATCH_SIZE,
     }
 
     run = tlc.init(
@@ -188,31 +189,30 @@ def main(args):
     checkpoint_path.make_parents(True)
 
     # Create datasets
-    tlc_train_table = tlc.Table.from_torch_dataset(
-        dataset=train_dataset,
-        dataset_name=TRAIN_DATASET_NAME,
-        table_name="train",
-        structure=sample_structure,
-        project_name=args.project_name,
-    )
-
     tlc_train_dataset = (
-        tlc_train_table.map(train_map)
-        .map_collect_metrics(val_map)
-        .revision(
-            None,
+        tlc.Table.from_torch_dataset(
+            dataset=train_dataset,
+            dataset_name=TRAIN_DATASET_NAME,
+            table_name="train",
+            structure=sample_structure,
+            project_name=args.project_name,
         )
+        .map(train_map)
+        .map_collect_metrics(val_map)
+        .revision(None)
     )
 
-    tlc_val_table = tlc.Table.from_torch_dataset(
-        dataset=val_dataset,
-        dataset_name=VAL_DATASET_NAME,
-        table_name="val",
-        structure=sample_structure,
-        project_name=args.project_name,
+    tlc_val_dataset = (
+        tlc.Table.from_torch_dataset(
+            dataset=val_dataset,
+            dataset_name=VAL_DATASET_NAME,
+            table_name="val",
+            structure=sample_structure,
+            project_name=args.project_name,
+        )
+        .map(val_map)
+        .revision(None)
     )
-
-    tlc_val_dataset = tlc_val_table.map(val_map).revision()
 
     print(f"Using training dataset: {tlc_train_dataset.url}")
     print(f"Using validation dataset: {tlc_val_dataset.url}")
@@ -221,7 +221,7 @@ def main(args):
     sampler = tlc_train_dataset.create_sampler() if args.use_sample_weights else None
     train_data_loader = DataLoader(
         tlc_train_dataset,
-        batch_size=32,
+        batch_size=BATCH_SIZE,
         shuffle=False if sampler else True,
         sampler=sampler,
         num_workers=4,
@@ -230,7 +230,7 @@ def main(args):
     )
     val_data_loader = DataLoader(
         tlc_val_dataset,
-        batch_size=32,
+        batch_size=BATCH_SIZE,
         shuffle=False,
         num_workers=0,
         pin_memory=True,
@@ -325,12 +325,14 @@ def main(args):
 
     if args.compute_embeddings:
         print("Reducing embeddings...")
-        run.reduce_embeddings_per_dataset(n_components=2, method="pacmap", delete_source_tables=True)
+        run.reduce_embeddings_by_foreign_table_url(
+            tlc_train_dataset.url, n_components=2, method="pacmap", delete_source_tables=True
+        )
 
     run.set_parameters(
         {
-            "model_path": checkpoint_path.apply_aliases().to_str(),
             "best_val_accuracy": best_val_accuracy,
+            "model_path": checkpoint_path.apply_aliases().to_str(),
             "use_sample_weights": args.use_sample_weights,
         }
     )
@@ -355,8 +357,8 @@ def get_classifier_model():
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--project-name", type=str, default="chessvision-classification")
-    argparser.add_argument("--run-name", type=str, default="train-classifier")
-    argparser.add_argument("--description", type=str, default="Train a chess piece classifier")
+    argparser.add_argument("--run-name", type=str, default="")
+    argparser.add_argument("--description", type=str, default="")
     argparser.add_argument("--compute-embeddings", action="store_true")
     argparser.add_argument("--resume", action="store_true")
     argparser.add_argument("--run-tests", action="store_true")
